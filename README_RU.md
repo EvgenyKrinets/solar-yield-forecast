@@ -1,5 +1,21 @@
 # Solar Yield Forecast — руководство по установке
 
+## 0.7.0 — intraday calibration / обучение формы
+
+The integration now learns the intraday profile from seven days of local DC
+power history. Corrections are enabled only after improving a separate
+two-day retrospective validation by at least 10%; insufficient data leaves
+the base forecast active. The hourly correction uses UTC to avoid DST shifts.
+It is combined with the existing daily calibration, and applied to interval
+energy as well as the power curve. Model Today exposes the modeled whole-day
+energy separately from Today (actual plus remaining).
+
+Поправки формы обучаются по истории DC-мощности автоматически. Статус,
+ошибки проверки и коэффициенты доступны в свойствах Today. Это проверка
+модели на прошлой погоде, а не обещание такой же точности на завтра.
+Для обновления установите 0.7.0 через HACS и перезапустите Home Assistant.
+
+
 [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=EvgenyKrinets&repository=solar-yield-forecast&category=integration)
 
 ## 0.6.0

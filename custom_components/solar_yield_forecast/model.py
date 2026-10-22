@@ -1,6 +1,6 @@
 """Dependency-free solar calculation and forecast calibration utilities."""
 from __future__ import annotations
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from statistics import median
 from zoneinfo import ZoneInfo
 import math
@@ -99,7 +99,7 @@ def hourly_power_profile(hourly):
 def peak_kw_of_profile(profile):
     return round(max((p["power_w"] for p in profile), default=0) / 1000.0, 2)
 
-def forecast_summary(forecast_rows, factor, actual_today, now):
+def forecast_summary(forecast_rows, factor, actual_today, now, shape=None):
     today = now.astimezone(TZ).date()
     today_iso = today.isoformat()
     days = [(today + timedelta(days=i)).isoformat() for i in range(8)]
@@ -118,7 +118,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now):
         seconds = row.get("interval_seconds", 3600)
         start = end - seconds
         duration_hours = seconds / 3600
-        calibrated_kw = max(0, row["kw"] * factor)
+        calibrated_kw = max(0, row["kw"] * factor * (shape or {}).get(str(datetime.fromtimestamp(start, timezone.utc).hour), 1.0))
         raw_by_day[date] += calibrated_kw * duration_hours
         if start <= now_ts < end:
             live_kw = calibrated_kw
@@ -141,6 +141,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now):
     power_profile_tomorrow = hourly_power_profile(by_day[days[1]])
     return {
         "today": round(sums[today_iso], 1),
+        "model_today": round(raw_by_day[today_iso], 1),
         "tomorrow": round(sums[days[1]], 1),
         "next_7_days": round(sum(sums[d] for d in days[1:]), 1),
         "remaining_today": round(remaining, 1),

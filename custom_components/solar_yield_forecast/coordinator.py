@@ -1,6 +1,8 @@
 """Hourly Open-Meteo polling + robust learning from real HA energy readings."""
 from __future__ import annotations
 import asyncio
+from functools import partial
+from .shape import power_hours, learn_shape
 import logging
 import math
 from datetime import datetime, timedelta, timezone
@@ -25,6 +27,10 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.store = Store(hass, 1, f"{DOMAIN}_{entry.entry_id}")
         self.actuals: dict[str, float] = {}
         self.forecast_rows = []
+        self.shape_factors = {}
+        self.shape_report = {"status": "not_loaded"}
+        self._shape_day = None
+        self._hourly_weather = []
         self.archive_rows = []
         self.factor = 1.0
         self.cal_days = 0
@@ -80,6 +86,8 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 return await self._one_group(base, group, extras)
         responses = await asyncio.gather(*(get(g) for g in PANEL_GROUPS))
         hourly = combine_weather(responses)
+        if base == API_FORECAST:
+            self._hourly_weather = hourly
         if base == API_FORECAST:
             try:
                 quarters = combine_weather(responses, section="minutely_15", interval_seconds=900)
@@ -158,13 +166,15 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
 
     def _build_data(self):
         now = datetime.now(timezone.utc)
-        result = forecast_summary(self.forecast_rows, self.factor, self._actual_today(now), now)
+        result = forecast_summary(self.forecast_rows, self.factor, self._actual_today(now), now, self.shape_factors)
         result.update({
             "factor_percent": round(self.factor * 100, 1),
             "calibration_days": self.cal_days,
             "training_error": self.training_error,
             "updated_at": now.isoformat(),
             "actual_today": self._actual_today(now),
+            "shape_calibration": self.shape_report,
+            "shape_factors_utc": self.shape_factors,
         })
         self._update_scorecard(now, result)
         return result
@@ -175,10 +185,44 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             await self._maybe_refresh_archive(now)
             # Radiation timestamps label interval ends: include the next midnight
             # so the eighth displayed day also contains its final hour.
-            self.forecast_rows = await self._get_groups(API_FORECAST, {"forecast_days": 9, "past_days": 0, "minutely_15": "global_tilted_irradiance,temperature_2m,wind_speed_10m"})
+            self.forecast_rows = await self._get_groups(API_FORECAST, {"forecast_days": 9, "past_days": 7, "minutely_15": "global_tilted_irradiance,temperature_2m,wind_speed_10m"})
+            await self._learn_shape(now)
             return self._build_data()
         except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
             raise UpdateFailed(f"Open-Meteo forecast failed: {exc}") from exc
+
+    async def _learn_shape(self, now):
+        today = now.astimezone(TZ).date().isoformat()
+        if self._shape_day == today:
+            return
+        self._shape_day = today
+        if "recorder" not in self.hass.config.components:
+            self.shape_report = {"status": "recorder_unavailable"}
+            return
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.history import get_significant_states
+            entity = self.entry.data.get("dc_power_sensor", "sensor.total_dc_power")
+            history = await get_instance(self.hass).async_add_executor_job(partial(
+                get_significant_states, self.hass, now-timedelta(days=7), now,
+                entity_ids=[entity], significant_changes_only=False,
+                minimal_response=False, no_attributes=False))
+            states = []
+            for state in history.get(entity, []):
+                try:
+                    value = float(state.state)
+                    unit = state.attributes.get("unit_of_measurement", "").lower()
+                    value = value/1000 if unit == "w" else value if unit == "kw" else None
+                except (ValueError, TypeError):
+                    value = None
+                states.append((state.last_updated.timestamp(), value))
+            hours = await self.hass.async_add_executor_job(power_hours, states, now.timestamp())
+            self.shape_factors, self.shape_report = learn_shape(hours, self._hourly_weather, self.factor, today, TZ)
+        except Exception:
+            # Optional calibration must never make the main forecast unavailable.
+            _LOGGER.exception("Could not learn intraday power profile")
+            self.shape_factors = {}
+            self.shape_report = {"status": "history_error"}
 
     def _ingest_state(self, state):
         if state is None or state.state in ("unknown", "unavailable", "none"):
@@ -222,7 +266,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             now = datetime.now(timezone.utc)
             if self.live_comparisons and (now - datetime.fromisoformat(self.live_comparisons[-1]["time"]) < timedelta(minutes=5)):
                 return
-            predicted = next((r["kw"] * self.factor for r in self.forecast_rows if r["end"] - r.get("interval_seconds", 3600) <= now.timestamp() < r["end"]), None)
+            predicted = next((r["kw"] * self.factor * self.shape_factors.get(str(datetime.fromtimestamp(r["end"]-r.get("interval_seconds",3600), timezone.utc).hour),1) for r in self.forecast_rows if r["end"] - r.get("interval_seconds", 3600) <= now.timestamp() < r["end"]), None)
             if predicted is None or predicted < 0.2:
                 return
             self.live_comparisons.append({

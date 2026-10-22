@@ -6,6 +6,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 
 SENSORS = (
+    ("model_today", "Model Today", "model_today", UnitOfEnergy.KILO_WATT_HOUR, None),
     ("today", "Today", "today", UnitOfEnergy.KILO_WATT_HOUR, None),
     ("tomorrow", "Tomorrow", "tomorrow", UnitOfEnergy.KILO_WATT_HOUR, None),
     ("next_7_days", "Next 7 Days", "next_7_days", UnitOfEnergy.KILO_WATT_HOUR, None),
@@ -54,6 +55,9 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
                 "hourly_forecast": values.get("hourly_today", []),
                 "actual_today_kwh": values.get("actual_today"),
                 "calibration_days": values.get("calibration_days"),
+                "model_today_kwh": values.get("model_today"),
+                "shape_calibration": values.get("shape_calibration", {}),
+                "shape_factors_utc": values.get("shape_factors_utc", {}),
                 "forecast_baselines": values.get("forecast_baselines", {}),
                 "power_comparisons": values.get("comparison_history", []),
             })

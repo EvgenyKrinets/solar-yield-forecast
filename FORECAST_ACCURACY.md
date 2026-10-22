@@ -14,8 +14,8 @@ the cause is shading, geometry, weather, DC/AC conversion or interpolation.
   present and energy-conserving hourly means otherwise.
 - Interval duration is explicitly included in energy and remaining-day sums.
 - Daily calibration is a single scalar based on historical daily energy. It
-  cannot learn a morning/evening shading profile. No unverified time-of-day
-  correction has been fitted to two screenshot curves.
+  cannot learn a morning/evening shading profile. Version 0.7.0 learns time-of-day
+  corrections from recorder data, with separate held-out validation days.
 
 ## Measurements needed before changing the production model
 
@@ -44,3 +44,14 @@ Forecasts fetched retrospectively are not proof of day-ahead forecast accuracy.
   integration is limited to four, while this installation has five groups.
 
 Private recorder exports and home credentials must not be committed to GitHub.
+
+## 0.7.0 calibration safeguards
+
+Seven days of local recorder history are integrated by elapsed time. Older
+days train UTC-hour factors; the newest two completed days validate them.
+At least six days, four training samples per hour, 12 validation samples and
+30 kWh of validation energy are required. Factors are bounded to 0.2–1.5.
+They activate only with a 10% relative improvement in retrospective WAPE.
+Invalid states and partial hours are excluded. Recorder failure retains the
+base forecast. No household history is published. A new Model Today sensor
+distinguishes model energy from Today (actual plus remaining).
