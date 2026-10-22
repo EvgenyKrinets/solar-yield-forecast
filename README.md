@@ -20,9 +20,19 @@ Custom integration for 48 × 670 W PV panels (five orientations) using Open-Mete
 3. Settings → Devices & services → Add integration → Solar Yield Forecast.
 4. Supply approximate latitude/longitude, `sensor.daily_pv_generation` and `sensor.total_dc_power`.
 
-### Dashboard (manual frontend resource)
+### Dashboard
 
-Download [solar-comparison-card.js](https://raw.githubusercontent.com/EvgenyKrinets/solar-yield-forecast/main/solar-comparison-card.js) to `/config/www/` and add Dashboard resource `/local/solar-comparison-card.js?v=1.1.0` of type JavaScript module. Use `dashboard.yaml` to add the card. **HACS installs the integration, not this JavaScript card automatically.** This is not yet a fully one-click dashboard installation.
+The card is bundled and loaded automatically after restarting Home Assistant.
+Add **Solar Comparison — широкий** or **Solar Comparison — компактный** in
+the target dashboard's card picker. Remove any old manually registered
+`/local/solar-comparison-card.js` resource to prevent duplicate old code.
+
+### Accuracy
+
+See [diagnosis and alternative sources](FORECAST_ACCURACY.md). Forecast weather
+accuracy has not been validated against a private recorder export yet.
+
+### Historical release notes
 
 ### New in 0.3.0
 

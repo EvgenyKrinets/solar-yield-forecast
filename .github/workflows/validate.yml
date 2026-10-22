@@ -10,6 +10,9 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # Custom-repository installation does not require catalog metadata.
+          # Remove these ignores before applying to the HACS default catalog.
+          ignore: description topics
   tests:
     runs-on: ubuntu-latest
     steps:
