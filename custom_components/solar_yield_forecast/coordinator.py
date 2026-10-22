@@ -19,7 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 
 class SolarYieldCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
-        super().__init__(hass, _LOGGER, name="Solar Yield Forecast", update_interval=timedelta(hours=1))
+        super().__init__(hass, _LOGGER, name="Solar Yield Forecast", update_interval=timedelta(minutes=15))
         self.entry = entry
         self.session = async_get_clientsession(hass)
         self.store = Store(hass, 1, f"{DOMAIN}_{entry.entry_id}")
