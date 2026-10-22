@@ -4,14 +4,14 @@ Custom integration for 48 × 670 W PV panels (five orientations) using Open-Mete
 
 ## Installation from HACS (custom repository)
 
-1. Add `https://github.com/EvgenyKrinets/solar-yield-forecast` as a **Custom repository → Integration** (only after this repository has actually been published).
+1. Add `https://github.com/EvgenyKrinets/solar-yield-forecast` as a **Custom repository → Integration**.
 2. Download Solar Yield Forecast, restart Home Assistant.
 3. Settings → Devices & services → Add integration → Solar Yield Forecast.
 4. Supply approximate latitude/longitude, `sensor.daily_pv_generation` and `sensor.total_dc_power`.
 
 ### Dashboard (manual frontend resource)
 
-Copy `solar-comparison-card.js` to `/config/www/` and add Dashboard resource `/local/solar-comparison-card.js?v=1.1.0` of type JavaScript module. Use `dashboard.yaml` to add the card. **HACS installs the integration, not this JavaScript card automatically.** This is not yet a fully one-click dashboard installation.
+Download [solar-comparison-card.js](https://raw.githubusercontent.com/EvgenyKrinets/solar-yield-forecast/main/solar-comparison-card.js) to `/config/www/` and add Dashboard resource `/local/solar-comparison-card.js?v=1.1.0` of type JavaScript module. Use `dashboard.yaml` to add the card. **HACS installs the integration, not this JavaScript card automatically.** This is not yet a fully one-click dashboard installation.
 
 ### New in 0.3.0
 
