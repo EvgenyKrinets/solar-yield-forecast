@@ -1,0 +1,6 @@
+type: custom:solar-comparison-card
+title: Солнечные панели — вчера / сегодня / прогноз
+pv_entity: sensor.total_dc_power
+forecast_entity: sensor.solar_yield_forecast_power_profile_today
+energy_entity: sensor.daily_pv_generation
+day_forecast_entity: sensor.solar_yield_forecast_today
