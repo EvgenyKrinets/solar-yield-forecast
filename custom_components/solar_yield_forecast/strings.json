@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Solar Yield Forecast",
+        "description": "Forecast for 48 × 670 W panels in five groups (32.16 kWp). Coordinates default to Dimona city centre.",
+        "data": {
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "daily_sensor": "Daily PV yield sensor (kWh, resets each day)",
+          "dc_power_sensor": "PV DC power sensor (W)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This forecast is already configured."
+    }
+  }
+}
