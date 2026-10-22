@@ -1,3 +1,9 @@
+# 0.7.2
+
+- Match the requested upper chart colors: yesterday blue, today's measured power golden yellow with a translucent area, and forecast green. Apply matching colors to the legend and tooltip.
+- Fill only today's observed intervals; leave future time and missing intervals unfilled. Keep the separate eight-day bar forecast.
+- Includes the smooth curves and larger typography from 0.7.1. Forecast calculations and interval values are unchanged.
+
 # 0.7.1
 
 - Draw shape-preserving smooth curves through the original 15-minute points. Curves do not overshoot the neighboring values or bridge missing intervals. Tooltip values, forecast calculations and energy totals are unchanged. Set `smooth: false` for straight segments.

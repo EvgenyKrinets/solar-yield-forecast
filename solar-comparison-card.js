@@ -24,7 +24,7 @@ function solarQuarterHours(rows, unit, now = Date.now()) {
 // Shape-preserving cubic curves pass through every measured point. Limiting
 // tangents avoids invented peaks/negative power; missing quarters stay gaps.
 // This changes only SVG geometry, never the interval values or energy totals.
-function solarSmoothPath(points, x, y, smooth = true) {
+function solarSmoothPath(points, x, y, smooth = true, baseline = null) {
   const groups = [];
   for (const point of points) {
     const group = groups[groups.length - 1], previous = group?.[group.length - 1];
@@ -45,6 +45,9 @@ function solarSmoothPath(points, x, y, smooth = true) {
       const a = group[i - 1], b = group[i], dx = (b[0] - a[0]) / 3;
       path += smooth ? ` C${xy([a[0] + dx, a[1] + dx * tangent[i - 1]])} ${xy([b[0] - dx, b[1] - dx * tangent[i]])} ${xy(b)}` : ' L' + xy(b);
     }
+    // Close each contiguous section separately so the fill cannot bridge gaps
+    // or extend today's observations into the forecast part of the day.
+    if (baseline !== null) path += ` L${xy([group[group.length - 1][0], baseline])} L${xy([group[0][0], baseline])} Z`;
     return path;
   }).join(' ');
 }
@@ -141,12 +144,13 @@ class SolarComparisonCard extends HTMLElement {
     }
     svg+='<text x="'+l+'" y="14" fill="currentColor" font-size="12">кВт</text>';
     for(let h=0;h<=24;h+=W<540?6:3)svg+='<text x="'+xx(h)+'" y="'+(H-14)+'" text-anchor="middle" fill="currentColor" font-size="13">'+String(h).padStart(2,'0')+':00</text>';
-    const colors=['#458ee0','#f2a03a','#16a68a'];
+    const colors=['#3478f6','#e0aa12','#16a06a'];
+    series.forEach(line=>line.sort((a,b)=>a[0]-b[0]));
+    if(actual[1].length)svg+='<path class="today-area" d="'+solarSmoothPath(actual[1],xx,yy,this.config.smooth!==false,0)+'" fill="'+colors[1]+'" fill-opacity="0.22" stroke="none"/>';
     series.forEach((line,i)=>{
       if(!line.length)return;
-      line.sort((a,b)=>a[0]-b[0]);
       const d=solarSmoothPath(line,xx,yy,this.config.smooth!==false);
-      svg+='<path d="'+d+'" fill="none" stroke="'+colors[i]+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
+      svg+='<path class="series-line" data-series="'+['yesterday','today','forecast'][i]+'" d="'+d+'" fill="none" stroke="'+colors[i]+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
     });
     svg+='<line class="cursorline" x1="0" y1="'+t+'" x2="0" y2="'+(H-b)+'" stroke="currentColor" stroke-dasharray="4 4" opacity="0"/>';
     svg+='</svg>';
@@ -181,9 +185,9 @@ class SolarComparisonCard extends HTMLElement {
       .unit{font-size:13px;font-weight:400;color:var(--secondary-text-color,#59656e);white-space:nowrap}
       @container(max-width:540px){h3{font-size:18px}.bars{gap:8px;grid-template-columns:repeat(4,minmax(0,1fr));height:auto;row-gap:20px}.day{height:150px}.chart-tooltip{white-space:normal}}
       </style><ha-card><h3>${esc(this.config.title)}</h3>
-      <div class="legend"><span><b class="dot" style="background:#458ee0"></b>Вчера</span>
-      <span><b class="dot" style="background:#f2a03a"></b>Сегодня</span>
-      <span><b class="dot" style="background:#16a68a"></b>Прогноз</span></div>
+      <div class="legend"><span><b class="dot" style="background:#3478f6"></b>Вчера</span>
+      <span><b class="dot" style="background:#e0aa12"></b>Сегодня · факт</span>
+      <span><b class="dot" style="background:#16a06a"></b>Прогноз</span></div>
       <div class="chart-wrap">${this._svg()}<div class="chart-tooltip"></div></div>
       <h3 class="more">Прогноз выработки на 8 дней <span class="unit">· кВт·ч</span></h3>
       <div class="bars">${days.map(d=>`<div class="day"><b>${esc(d.kwh)} </b><div class="bar" style="height:${Math.max(2,100*(Number(d.kwh)||0)/max)}px"></div><span>${esc((d.date||'').slice(5))}</span></div>`).join('')}</div>
@@ -206,7 +210,7 @@ class SolarComparisonCard extends HTMLElement {
         const values=(this._series||[]).map(near);
         if(values.every(v=>v===null)){tip.style.display='none';if(guide)guide.setAttribute('opacity','0');return;}
         const timeHour=Math.floor(hour),timeMin=Math.floor((hour-timeHour)*4)*15;
-        tip.innerHTML='<b>'+String((timeHour+Math.floor(timeMin/60))%24).padStart(2,'0')+':'+String(timeMin%60).padStart(2,'0')+'</b><div style="color:#458ee0">Вчера: '+(values[0]===null?'—':(values[0]/1000).toFixed(2)+' кВт')+'</div><div style="color:#f2a03a">Сегодня: '+(values[1]===null?'—':(values[1]/1000).toFixed(2)+' кВт')+'</div><div style="color:#16a68a">Прогноз: '+(values[2]===null?'—':(values[2]/1000).toFixed(2)+' кВт')+'</div>';
+        tip.innerHTML='<b>'+String((timeHour+Math.floor(timeMin/60))%24).padStart(2,'0')+':'+String(timeMin%60).padStart(2,'0')+'</b><div style="color:#3478f6">Вчера: '+(values[0]===null?'—':(values[0]/1000).toFixed(2)+' кВт')+'</div><div style="color:#e0aa12">Сегодня (факт): '+(values[1]===null?'—':(values[1]/1000).toFixed(2)+' кВт')+'</div><div style="color:#16a06a">Прогноз: '+(values[2]===null?'—':(values[2]/1000).toFixed(2)+' кВт')+'</div>';
         if(values[1]!==null) tip.innerHTML+='<div>Энергия за 15 мин: '+(values[1]/4000).toFixed(3)+' кВт·ч</div>';
         if(values[1]!==null && values[2]>0) tip.innerHTML+='<div>Отклонение: '+(100*(values[1]-values[2])/values[2]).toFixed(1)+'%</div>';
         tip.style.display='block';

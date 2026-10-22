@@ -49,3 +49,13 @@ test('smoothing never joins gaps; linear opt-out and isolated points work',()=>{
  assert.ok(!linear.includes('C'));assert.equal((linear.match(/L/g)||[]).length,2);
  assert.equal(ctx.solarSmoothPath([],id,id),'');
 });
+
+test('today fill closes each observed section without filling gaps or future time',()=>{
+ const points=[[8,1000],[8.25,2000],[9,3000],[9.25,1000]],id=x=>x;
+ const area=ctx.solarSmoothPath(points,id,id,true,0);
+ assert.equal((area.match(/M/g)||[]).length,2);
+ assert.equal((area.match(/Z/g)||[]).length,2);
+ assert.match(area,/L8.25,0.00 L8.00,0.00 Z M9.00/);
+ assert.ok(area.endsWith('L9.25,0.00 L9.00,0.00 Z'));
+ assert.equal(ctx.solarSmoothPath([],id,id,true,0),'');
+});

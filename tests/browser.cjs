@@ -22,13 +22,18 @@ const assert=require('node:assert/strict');
      const root=card.shadowRoot,svg=root.querySelector('svg'),dates=[...root.querySelectorAll('.day>span')];
      return {font:getComputedStyle(root.querySelector('.legend')).fontSize,family:getComputedStyle(root.querySelector('ha-card')).fontFamily,
        labelScale:svg.getBoundingClientRect().width/svg.viewBox.baseVal.width,
-       curve:root.querySelector('path').getAttribute('d'),
+       curve:root.querySelector('.series-line').getAttribute('d'),
        datesFit:dates.every(el=>el.scrollWidth<=el.clientWidth+1),
        rows:new Set(dates.map(el=>Math.round(el.getBoundingClientRect().top))).size};
    });
    assert.equal(metrics.font,'14px');assert.match(metrics.family,/Roboto|system-ui/);
    assert.ok(metrics.labelScale>=.98);assert.match(metrics.curve,/C/);assert.ok(metrics.datesFit);
    assert.equal(metrics.rows,width<580?2:1);
+   assert.equal(await page.locator('.day').count(),8);
+   assert.equal(await page.locator('.today-area').count(),1);
+   assert.equal(await page.locator('[data-series="yesterday"]').getAttribute('stroke'),'#3478f6');
+   assert.equal(await page.locator('[data-series="today"]').getAttribute('stroke'),'#e0aa12');
+   assert.equal(await page.locator('[data-series="forecast"]').getAttribute('stroke'),'#16a06a');
    await svg.dispatchEvent('pointermove',{clientX:box.x+box.width/2,clientY:box.y+60});
    await page.waitForFunction(()=>document.querySelector('solar-comparison-card').shadowRoot.querySelector('.chart-tooltip').style.display==='block');
    const text=await page.locator('.chart-tooltip').innerText();assert.match(text,/4.00/);
@@ -39,13 +44,13 @@ const assert=require('node:assert/strict');
  await page.waitForTimeout(100);
  assert.equal(await page.locator('svg').evaluate(e=>e.viewBox.baseVal.height),260);
  await page.evaluate(()=>document.querySelector('solar-comparison-card').hass=window.fixture);
- await page.waitForFunction(()=>document.querySelector('solar-comparison-card').shadowRoot.querySelectorAll('path').length===3);
+ await page.waitForFunction(()=>document.querySelector('solar-comparison-card').shadowRoot.querySelectorAll('.series-line').length===3);
  await page.evaluate(async()=>{
    const card=document.querySelector('solar-comparison-card');
    card.hass={...window.fixture,callApi:async()=>{throw {message:'History refresh failed'};}};
    await card._fetch();
  });
  assert.match(await page.locator('.small').allTextContents().then(x=>x.join(' ')),/History refresh failed/);
- assert.equal(await page.locator('path').count(),3);
+ assert.equal(await page.locator('.series-line').count(),3);
  assert.deepEqual(errors,[]);await browser.close();console.log('Browser: curves, readable fonts, responsive bars, hover, compact, invalid timestamps, refresh failure passed');
 })().catch(e=>{console.error(e);process.exit(1)});
