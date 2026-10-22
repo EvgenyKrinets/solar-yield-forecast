@@ -77,13 +77,39 @@ def calibration(actual_by_day, archive_rows, current_day):
     return factor, len(ratios), round(fitting_error, 1)
 
 def hourly_power_profile(hourly):
-    profile = []
+    """Interpolate hourly mean PV power into 15-minute DISPLAY points.
+
+    This is interpolation, not independent quarter-hour weather prediction.
+    Daily energy remains calculated from original hourly mean estimates.
+    """
+    midpoints = []
     for hour in hourly:
         start = datetime.fromisoformat(hour["start"])
-        mid = start + timedelta(minutes=30)
-        power = max(0.0, _number(hour.get("kw"))) * 1000.0
-        profile.append({"time": mid.isoformat(), "power_w": round(power)})
+        midpoints.append((start + timedelta(minutes=30), max(0.0, _number(hour.get("kw"))) * 1000))
+    if not midpoints:
+        return []
+    profile = []
+    for index, (mid, watts) in enumerate(midpoints):
+        for quarter in range(4):
+            when = mid - timedelta(minutes=22, seconds=30) + timedelta(minutes=15 * quarter)
+            if index == 0:
+                interpolated = watts
+            elif index == len(midpoints)-1:
+                previous = midpoints[index-1][1]
+                fraction = max(0.0, min(1.0, (when - midpoints[index-1][0]).total_seconds()/3600))
+                interpolated = previous + fraction*(watts - previous)
+            else:
+                nxt = midpoints[index+1]
+                if when <= mid:
+                    prev = midpoints[index-1]
+                    fraction = (when-prev[0]).total_seconds()/3600
+                    interpolated = prev[1] + fraction*(watts-prev[1])
+                else:
+                    fraction = (when-mid).total_seconds()/3600
+                    interpolated = watts + fraction*(nxt[1]-watts)
+            profile.append({"time": when.isoformat(), "power_w": round(max(0,interpolated))})
     return profile
+
 
 def peak_kw_of_profile(profile):
     return round(max((p["power_w"] for p in profile), default=0) / 1000.0, 2)
