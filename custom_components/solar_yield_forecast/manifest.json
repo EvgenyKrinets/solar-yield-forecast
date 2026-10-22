@@ -1,0 +1,10 @@
+{
+  "domain": "solar_yield_forecast",
+  "name": "Solar Yield Forecast — Dimona",
+  "version": "0.3.0",
+  "documentation": "https://github.com/EvgenyKrinets/solar-yield-forecast",
+  "config_flow": true,
+  "iot_class": "cloud_polling",
+  "integration_type": "hub",
+  "requirements": []
+}
