@@ -38,12 +38,14 @@ const assert=require('node:assert/strict');
  await page.evaluate(()=>document.querySelector('solar-comparison-card').setConfig({size:'compact'}));
  await page.waitForTimeout(100);
  assert.equal(await page.locator('svg').evaluate(e=>e.viewBox.baseVal.height),260);
+ await page.evaluate(()=>document.querySelector('solar-comparison-card').hass=window.fixture);
+ await page.waitForFunction(()=>document.querySelector('solar-comparison-card').shadowRoot.querySelectorAll('path').length===3);
  await page.evaluate(async()=>{
    const card=document.querySelector('solar-comparison-card');
    card.hass={...window.fixture,callApi:async()=>{throw {message:'History refresh failed'};}};
    await card._fetch();
  });
  assert.match(await page.locator('.small').allTextContents().then(x=>x.join(' ')),/History refresh failed/);
- assert.ok(await page.locator('path').count()>0);
+ assert.equal(await page.locator('path').count(),3);
  assert.deepEqual(errors,[]);await browser.close();console.log('Browser: curves, readable fonts, responsive bars, hover, compact, invalid timestamps, refresh failure passed');
 })().catch(e=>{console.error(e);process.exit(1)});
