@@ -1,7 +1,7 @@
 {
   "domain": "solar_yield_forecast",
-  "name": "Solar Yield Forecast — Dimona",
-  "version": "0.5.0",
+  "name": "Solar Yield Forecast \u00e2\u20ac\u201d Dimona",
+  "version": "0.6.0",
   "documentation": "https://github.com/EvgenyKrinets/solar-yield-forecast",
   "config_flow": true,
   "iot_class": "cloud_polling",
@@ -10,5 +10,9 @@
   "issue_tracker": "https://github.com/EvgenyKrinets/solar-yield-forecast/issues",
   "codeowners": [
     "@EvgenyKrinets"
+  ],
+  "dependencies": [
+    "frontend",
+    "http"
   ]
 }

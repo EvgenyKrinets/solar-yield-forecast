@@ -1,5 +1,16 @@
 # Solar Yield Forecast — руководство по установке
 
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=EvgenyKrinets&repository=solar-yield-forecast&category=integration)
+
+## 0.6.0
+
+15-minute time-weighted analysis replaces sample-count averaging. Only fully covered, completed intervals are shown. Open-Meteo 15-minute forecasts are integrated as kW × 0.25 h, with hourly fallback for the remaining horizon. In Israel, the provider interpolates weather from hourly data; this is not a guarantee of 15-minute weather accuracy. See [release notes](RELEASE_NOTES.md).
+
+Установка: нажмите **Open in HACS**, подтвердите добавление репозитория и скачайте интеграцию. Перезапустите Home Assistant и добавьте Solar Yield Forecast в Devices & services. Карточки устанавливаются автоматически: выберите широкую или компактную в редакторе нужного Dashboard. Первую установку и перезапуск подтверждает пользователь; интеграция не устанавливает HACS самостоятельно.
+
+В 0.6.0 фактическая мощность учитывает длительность показаний, пропуски не соединяются линией. Показываются завершённые 15-минутные интервалы. Новые данные прогноза используют длительность интервала при расчёте энергии. Погодная точность для Израиля ограничена интерполяцией Open-Meteo. Раздел о 0.5.0 ниже описывает предыдущую версию.
+
+
 Интеграция Home Assistant для системы 48 × 670 Вт = 32,16 кВтp в пяти группах. Использует Open-Meteo, корректирует прогноз по реальной суточной энергии и ведёт независимую оценку ошибки прогнозов на будущие дни.
 
 ## HACS (настройка один раз)
@@ -33,7 +44,7 @@
 - `Training Error` — ошибка подгонки на исторических днях, **не** точность будущего прогноза.
 - `Forward Forecast Error` — ошибка сохранённых прогнозов, выпущенных минимум за день до даты. В начале она может быть недоступна до накопления наблюдений.
 - В течение дня прогноз `Today` меняется: фактически произведённая энергия + погодная оценка оставшегося дня.
-- Мощность `Power Now` — средняя за час, а не мгновенное измерение.
+- Мощность `Power Now` — средняя за интервал (15 минут при наличии данных, иначе час), а не мгновенное измерение.
 - Долговременные ограничения экспорта и заряда могут привести к недоучёту потенциальной генерации.
 
 ## Обновление

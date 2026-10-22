@@ -14,7 +14,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.core import callback
 from .const import (DOMAIN, PANEL_GROUPS, API_ARCHIVE, API_FORECAST, DEFAULT_DAILY_SENSOR, TIMEZONE)
-from .model import (TZ, combine_weather, calibration, forecast_summary, open_meteo_azimuth)
+from .model import (TZ, combine_weather, calibration, forecast_summary, open_meteo_azimuth, merge_quarter_hourly)
 _LOGGER = logging.getLogger(__name__)
 
 class SolarYieldCoordinator(DataUpdateCoordinator):
@@ -39,7 +39,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
     async def async_initialize(self):
         seed_path = Path(__file__).with_name("daily_seed.json")
         try:
-            self.actuals = {k: float(v) for k, v in json.loads(seed_path.read_text(encoding="utf-8")).items()}
+            self.actuals = {k: float(v) for k, v in json.loads(await self.hass.async_add_executor_job(seed_path.read_text, "utf-8")).items()}
         except (FileNotFoundError, ValueError, OSError) as exc:
             _LOGGER.debug("No bundled history: %s", exc)
         data = await self.store.async_load() or {}
@@ -79,7 +79,14 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             async with semaphore:
                 return await self._one_group(base, group, extras)
         responses = await asyncio.gather(*(get(g) for g in PANEL_GROUPS))
-        return combine_weather(responses)
+        hourly = combine_weather(responses)
+        if base == API_FORECAST:
+            try:
+                quarters = combine_weather(responses, section="minutely_15", interval_seconds=900)
+                return merge_quarter_hourly(hourly, quarters)
+            except ValueError:
+                _LOGGER.warning("Incomplete 15-minute forecast; using hourly means")
+        return hourly
 
     async def _maybe_refresh_archive(self, now):
         if self.archive_last_attempt is not None and (now - self.archive_last_attempt < timedelta(hours=20)):
@@ -166,7 +173,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         try:
             now = datetime.now(timezone.utc)
             await self._maybe_refresh_archive(now)
-            self.forecast_rows = await self._get_groups(API_FORECAST, {"forecast_days": 8, "past_days": 0})
+            self.forecast_rows = await self._get_groups(API_FORECAST, {"forecast_days": 8, "past_days": 0, "minutely_15": "global_tilted_irradiance,temperature_2m,wind_speed_10m"})
             return self._build_data()
         except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
             raise UpdateFailed(f"Open-Meteo forecast failed: {exc}") from exc
@@ -213,13 +220,13 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             now = datetime.now(timezone.utc)
             if self.live_comparisons and (now - datetime.fromisoformat(self.live_comparisons[-1]["time"]) < timedelta(minutes=5)):
                 return
-            predicted = next((r["kw"] * self.factor for r in self.forecast_rows if r["end"] - 3600 <= now.timestamp() < r["end"]), None)
+            predicted = next((r["kw"] * self.factor for r in self.forecast_rows if r["end"] - r.get("interval_seconds", 3600) <= now.timestamp() < r["end"]), None)
             if predicted is None or predicted < 0.2:
                 return
             self.live_comparisons.append({
                 "time": now.isoformat(),
                 "actual_kw": round(power_kw,2),
-                "forecast_hour_mean_kw": round(predicted,2),
+                "forecast_interval_mean_kw": round(predicted,2),
             })
             self.live_comparisons = self.live_comparisons[-300:]
             self._persist()

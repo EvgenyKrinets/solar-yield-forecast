@@ -26,12 +26,12 @@ def estimate_kw(irradiance_w_m2, air_temp_c, wind_kmh, group):
     temp_factor = max(0.60, min(1.12, 1.0 - 0.0035 * (cell_temp - 25.0)))
     return group["count"] * PANEL_KWP * gti / 1000.0 * 0.92 * temp_factor
 
-def combine_weather(group_responses, groups=PANEL_GROUPS):
+def combine_weather(group_responses, groups=PANEL_GROUPS, section="hourly", interval_seconds=3600):
     results = {}
     if len(group_responses) != len(groups):
         raise ValueError("Missing panel group weather response")
     for group, response in zip(groups, group_responses):
-        hourly = response.get("hourly") or {}
+        hourly = response.get(section) or {}
         times = hourly.get("time") or []
         irradiances = hourly.get("global_tilted_irradiance") or []
         temps = hourly.get("temperature_2m") or []
@@ -39,21 +39,25 @@ def combine_weather(group_responses, groups=PANEL_GROUPS):
         if not times or len(times) != len(irradiances):
             raise ValueError(f"Missing radiation from Open-Meteo for {group['id']}")
         for i, stamp in enumerate(times):
+            if _number(irradiances[i], None) is None:
+                if section == "minutely_15":
+                    continue
+                raise ValueError("Missing hourly irradiance")
             stamp = int(stamp)
-            entry = results.setdefault(stamp, {"end": stamp, "group_kw": {}, "kw": 0.0})
+            entry = results.setdefault(stamp, {"end": stamp, "interval_seconds": interval_seconds, "group_kw": {}, "kw": 0.0})
             kw = estimate_kw(irradiances[i], temps[i] if i < len(temps) else 25, winds[i] if i < len(winds) else 0, group)
             entry["group_kw"][group["id"]] = kw
             entry["kw"] += kw
     return [results[k] for k in sorted(results) if len(results[k]["group_kw"]) == len(groups)]
 
-def day_of_hour(hour_end_unix):
-    return datetime.fromtimestamp(hour_end_unix - 1800, TZ).date().isoformat()
+def day_of_hour(hour_end_unix, interval_seconds=3600):
+    return datetime.fromtimestamp(hour_end_unix - interval_seconds / 2, TZ).date().isoformat()
 
 def daily_raw_totals(rows):
     totals = {}
     for row in rows:
-        day = day_of_hour(row["end"])
-        totals[day] = totals.get(day, 0.0) + row["kw"]
+        day = day_of_hour(row["end"], row.get("interval_seconds", 3600))
+        totals[day] = totals.get(day, 0.0) + row["kw"] * row.get("interval_seconds", 3600) / 3600
     return totals
 
 def calibration(actual_by_day, archive_rows, current_day):
@@ -77,38 +81,19 @@ def calibration(actual_by_day, archive_rows, current_day):
     return factor, len(ratios), round(fitting_error, 1)
 
 def hourly_power_profile(hourly):
-    """Interpolate hourly mean PV power into 15-minute DISPLAY points.
-
-    This is interpolation, not independent quarter-hour weather prediction.
-    Daily energy remains calculated from original hourly mean estimates.
-    """
-    midpoints = []
+    """Produce interval midpoints, preserving energy for hourly fallback rows."""
+    profile = []
     for hour in hourly:
         start = datetime.fromisoformat(hour["start"])
-        midpoints.append((start + timedelta(minutes=30), max(0.0, _number(hour.get("kw"))) * 1000))
-    if not midpoints:
-        return []
-    profile = []
-    for index, (mid, watts) in enumerate(midpoints):
-        for quarter in range(4):
-            when = mid - timedelta(minutes=22, seconds=30) + timedelta(minutes=15 * quarter)
-            if index == 0:
-                interpolated = watts
-            elif index == len(midpoints)-1:
-                previous = midpoints[index-1][1]
-                fraction = max(0.0, min(1.0, (when - midpoints[index-1][0]).total_seconds()/3600))
-                interpolated = previous + fraction*(watts - previous)
-            else:
-                nxt = midpoints[index+1]
-                if when <= mid:
-                    prev = midpoints[index-1]
-                    fraction = (when-prev[0]).total_seconds()/3600
-                    interpolated = prev[1] + fraction*(watts-prev[1])
-                else:
-                    fraction = (when-mid).total_seconds()/3600
-                    interpolated = watts + fraction*(nxt[1]-watts)
-            profile.append({"time": when.isoformat(), "power_w": round(max(0,interpolated))})
+        seconds = hour.get("interval_seconds", 3600)
+        for offset in range(0, seconds, 900):
+            # Work on the UTC timeline, including DST transitions.
+            when = datetime.fromtimestamp(start.timestamp() + offset + 450, TZ)
+            profile.append({"time": when.isoformat(), "power_w": round(hour["kw"] * 1000),
+                            "energy_kwh": round(hour["kw"] / 4, 5),
+                            "source": "open_meteo_15min" if seconds == 900 else "hourly_mean"})
     return profile
+
 
 
 def peak_kw_of_profile(profile):
@@ -126,27 +111,29 @@ def forecast_summary(forecast_rows, factor, actual_today, now):
     now_ts = now.timestamp()
     current_interval_found = False
     for row in forecast_rows:
-        date = day_of_hour(row["end"])
+        date = day_of_hour(row["end"], row.get("interval_seconds", 3600))
         if date not in sums:
             continue
         end = int(row["end"])
-        start = end - 3600
+        seconds = row.get("interval_seconds", 3600)
+        start = end - seconds
+        duration_hours = seconds / 3600
         calibrated_kw = max(0, row["kw"] * factor)
-        raw_by_day[date] += calibrated_kw
+        raw_by_day[date] += calibrated_kw * duration_hours
         if start <= now_ts < end:
             live_kw = calibrated_kw
             current_interval_found = True
-        by_day[date].append({"start": datetime.fromtimestamp(start, TZ).isoformat(), "kw": round(calibrated_kw, 2)})
+        by_day[date].append({"start": datetime.fromtimestamp(start, TZ).isoformat(), "kw": calibrated_kw, "interval_seconds": seconds})
         if date == today_iso:
-            fraction_left = max(0.0, min(1.0, (end - now_ts) / 3600.0))
-            remaining += calibrated_kw * fraction_left
+            fraction_left = max(0.0, min(1.0, (end - now_ts) / seconds))
+            remaining += calibrated_kw * fraction_left * duration_hours
         else:
-            sums[date] += calibrated_kw
+            sums[date] += calibrated_kw * duration_hours
     if not current_interval_found:
         live_kw = 0.0
     if actual_today is None:
         sums[today_iso] = raw_by_day[today_iso]
-        remaining = max(0.0, sum(row["kw"] * factor * max(0, min(1, (int(row["end"]) - now_ts) / 3600)) for row in forecast_rows if day_of_hour(row["end"]) == today_iso))
+
     else:
         sums[today_iso] = actual_today + remaining
     daily = [{"date": d, "kwh": round(sums[d], 1)} for d in days]
@@ -168,3 +155,13 @@ def forecast_summary(forecast_rows, factor, actual_today, now):
         "forecast_date_today": today_iso,
         "forecast_date_tomorrow": days[1],
     }
+
+
+def merge_quarter_hourly(hourly, quarters):
+    """Replace only complete hours; retain hourly coverage for the 8-day horizon."""
+    by_end = {r["end"]: r for r in quarters}
+    result = []
+    for row in hourly:
+        ends = [row["end"] - 2700 + i * 900 for i in range(4)]
+        result.extend([by_end[e] for e in ends] if all(e in by_end for e in ends) else [row])
+    return result

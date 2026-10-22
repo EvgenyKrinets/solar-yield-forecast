@@ -1,0 +1,32 @@
+name: Release integration
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [custom_components/solar_yield_forecast/manifest.json]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install pytest
+      - run: python -m pytest -q tests
+      - run: node --test tests/test_card.cjs
+      - run: python -m compileall -q custom_components
+      - name: Package and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python -c "import json; print(json.load(open('custom_components/solar_yield_forecast/manifest.json'))['version'])")
+          cd custom_components/solar_yield_forecast
+          zip -r ../../solar_yield_forecast.zip . -x '*/__pycache__/*' '__pycache__/*' '*.pyc'
+          cd ../..
+          gh release create "v$VERSION" solar_yield_forecast.zip --target "$GITHUB_SHA" --title "Solar Yield Forecast $VERSION" --notes-file RELEASE_NOTES.md
