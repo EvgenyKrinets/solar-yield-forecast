@@ -1,3 +1,13 @@
+# 0.7.1
+
+- Draw shape-preserving smooth curves through the original 15-minute points. Curves do not overshoot the neighboring values or bridge missing intervals. Tooltip values, forecast calculations and energy totals are unchanged. Set `smooth: false` for straight segments.
+- Use the Home Assistant/system font, larger headings, 13px axis labels, 14px legends and tooltips, and tabular numbers. Keep all labels readable in narrow cards: fewer time ticks and two rows of daily bars.
+- Improve chart spacing, display power/energy units, and keep the 24:00 label inside the card.
+- Preserve already-loaded history on a temporary refresh error and show a readable error message.
+- Refresh the automatically loaded frontend cache version and repair the integration display name.
+
+Update in HACS, restart Home Assistant, then refresh the dashboard. Remove any old manually registered `/local/solar-comparison-card.js` resource if it overrides the automatically loaded card.
+
 # 0.7.0
 
 - Learn intraday power bias from the local recorder's previous seven days, using time-weighted energy and UTC hour buckets.

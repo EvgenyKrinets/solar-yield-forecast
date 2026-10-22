@@ -10,13 +10,25 @@ const assert=require('node:assert/strict');
    const card=document.querySelector('solar-comparison-card');card.setConfig({});
    const now=Date.now(), rows=[];
    for(let t=now-54*3600000;t<now;t+=60000)rows.push({last_changed:new Date(t).toISOString(),state:'4000'});
-   const hass={states:{'sensor.total_dc_power':{attributes:{unit_of_measurement:'W'}},'sensor.solar_yield_forecast_today':{attributes:{daily_forecast:Array.from({length:8},(_,i)=>({date:'2026-10-'+(22+i),kwh:100+i}))}},'sensor.solar_yield_forecast_power_profile_today':{attributes:{points:[{time:'invalid',power_w:null}]}}},callApi:async()=>[rows]};
+   const points=Array.from({length:216},(_,i)=>({time:new Date(now-54*3600000+i*900000).toISOString(),power_w:4500+3000*Math.sin(i/12)}));
+   const hass={states:{'sensor.total_dc_power':{attributes:{unit_of_measurement:'W'}},'sensor.solar_yield_forecast_today':{attributes:{daily_forecast:Array.from({length:8},(_,i)=>({date:'2026-10-'+(22+i),kwh:100+i}))}},'sensor.solar_yield_forecast_power_profile_today':{attributes:{points:[{time:'invalid',power_w:null},...points]}}},callApi:async()=>[rows]};
    window.fixture=hass;card.hass=hass;
  });
  for(const width of [360,850,1400]){
    await page.setViewportSize({width,height:900});await page.waitForTimeout(150);
    const svg=page.locator('solar-comparison-card').locator('svg');
    const box=await svg.boundingBox();assert.ok(box.width<=width);
+   const metrics=await page.locator('solar-comparison-card').evaluate(card=>{
+     const root=card.shadowRoot,svg=root.querySelector('svg'),dates=[...root.querySelectorAll('.day>span')];
+     return {font:getComputedStyle(root.querySelector('.legend')).fontSize,family:getComputedStyle(root.querySelector('ha-card')).fontFamily,
+       labelScale:svg.getBoundingClientRect().width/svg.viewBox.baseVal.width,
+       curve:root.querySelector('path').getAttribute('d'),
+       datesFit:dates.every(el=>el.scrollWidth<=el.clientWidth+1),
+       rows:new Set(dates.map(el=>Math.round(el.getBoundingClientRect().top))).size};
+   });
+   assert.equal(metrics.font,'14px');assert.match(metrics.family,/Roboto|system-ui/);
+   assert.ok(metrics.labelScale>=.98);assert.match(metrics.curve,/C/);assert.ok(metrics.datesFit);
+   assert.equal(metrics.rows,width<580?2:1);
    await svg.dispatchEvent('pointermove',{clientX:box.x+box.width/2,clientY:box.y+60});
    await page.waitForFunction(()=>document.querySelector('solar-comparison-card').shadowRoot.querySelector('.chart-tooltip').style.display==='block');
    const text=await page.locator('.chart-tooltip').innerText();assert.match(text,/4.00/);
@@ -26,5 +38,12 @@ const assert=require('node:assert/strict');
  await page.evaluate(()=>document.querySelector('solar-comparison-card').setConfig({size:'compact'}));
  await page.waitForTimeout(100);
  assert.equal(await page.locator('svg').evaluate(e=>e.viewBox.baseVal.height),260);
- assert.deepEqual(errors,[]);await browser.close();console.log('Browser: hover, resize, compact, invalid timestamps, unrelated HA updates passed');
+ await page.evaluate(async()=>{
+   const card=document.querySelector('solar-comparison-card');
+   card.hass={...window.fixture,callApi:async()=>{throw {message:'History refresh failed'};}};
+   await card._fetch();
+ });
+ assert.match(await page.locator('.small').allTextContents().then(x=>x.join(' ')),/History refresh failed/);
+ assert.ok(await page.locator('path').count()>0);
+ assert.deepEqual(errors,[]);await browser.close();console.log('Browser: curves, readable fonts, responsive bars, hover, compact, invalid timestamps, refresh failure passed');
 })().catch(e=>{console.error(e);process.exit(1)});

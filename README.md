@@ -79,3 +79,7 @@ The **Wide** card uses `custom:solar-comparison-card` and requests the whole ava
 ## v0.5.0 interactive plot and quarter-hour analysis
 
 Hover or touch the time plot for the previous-day, current-day, and forecast power values. Actual history is binned into 15-minute averages. The weather profile is interpolated to 15-minute display points from hourly radiation (not independent 15-minute weather predictions in Israel). Forecast refresh is scheduled every 15 minutes; raw daily energy is still integrated from the original hourly means. Restart HA after updating in HACS.
+
+## Smooth charts (0.7.1)
+
+Curves pass through the original 15-minute values without overshooting or bridging gaps. Smoothing only affects the drawing; tooltips and energy calculations retain the original data. Set `smooth: false` in the card YAML to use straight segments. Labels use the Home Assistant/system font; small cards show daily bars in two rows.

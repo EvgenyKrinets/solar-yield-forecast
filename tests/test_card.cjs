@@ -19,3 +19,33 @@ test('kW and partial intervals',()=>{
  assert.equal(ctx.solarQuarterHours([row(0,4)],'kW',899999).length,0);
 });
 test('bundled and manual cards are identical',()=>assert.equal(source,fs.readFileSync('solar-comparison-card.js','utf8')));
+
+test('smooth curves preserve knots, bounds and input measurements',()=>{
+ const points=[[0,0],[.25,1000],[.5,9000],[.75,9100],[1,200],[1.25,0],[1.5,0]];
+ const original=JSON.stringify(points), identity=x=>x;
+ const path=ctx.solarSmoothPath(points,identity,identity);
+ const curves=[...path.matchAll(/C([\d., -]+)/g)].map(m=>m[1].trim().split(/[ ,]+/).map(Number));
+ assert.equal(curves.length,points.length-1);
+ for(let i=0;i<curves.length;i++){
+   const [x1,y1,x2,y2,x3,y3]=curves[i], [x0,y0]=points[i];
+   assert.equal(x3,points[i+1][0]); assert.equal(y3,points[i+1][1]);
+   let previous=y0;
+   for(let j=0;j<=100;j++){
+     const t=j/100,u=1-t,y=u*u*u*y0+3*u*u*t*y1+3*u*t*t*y2+t*t*t*y3;
+     assert.ok(y>=Math.min(y0,y3)-.01 && y<=Math.max(y0,y3)+.01);
+     assert.ok(y3>=y0 ? y>=previous-.01 : y<=previous+.01);previous=y;
+   }
+   assert.ok(x1>=x0 && x2<=x3);
+ }
+ assert.equal(JSON.stringify(points),original);
+});
+
+test('smoothing never joins gaps; linear opt-out and isolated points work',()=>{
+ const points=[[0,0],[.25,200],[1,300],[1.25,0],[2,0]],id=x=>x;
+ const path=ctx.solarSmoothPath(points,id,id);
+ assert.equal((path.match(/M/g)||[]).length,3);
+ assert.equal((path.match(/C/g)||[]).length,2);
+ const linear=ctx.solarSmoothPath(points,id,id,false);
+ assert.ok(!linear.includes('C'));assert.equal((linear.match(/L/g)||[]).length,2);
+ assert.equal(ctx.solarSmoothPath([],id,id),'');
+});
