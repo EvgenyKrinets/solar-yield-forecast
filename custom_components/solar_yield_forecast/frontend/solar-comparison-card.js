@@ -86,7 +86,8 @@ class SolarComparisonCard extends HTMLElement {
     const series=[aggregate(actual[0]),aggregate(actual[1]),forecast];
     this._series=series;
     const max=Math.max(1000,...series.flat().map(p=>p[1]))*1.08;
-    const W=850,H=315,l=55,r=16,t=20,b=38;
+    const W=Math.max(340,Math.round(this.getBoundingClientRect().width||850)-32),H=this.config?.size==='compact'?260:330,l=55,r=16,t=20,b=38;
+    this._plotGeometry={W,H,l,r,t,b};
     const xx=x=>l+(W-l-r)*x/24;
     const yy=y=>t+(H-t-b)*(1-y/max);
     let svg='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Мощность вчера, сегодня и прогноз">';
@@ -122,7 +123,7 @@ class SolarComparisonCard extends HTMLElement {
       h3{margin:0 0 10px;font-size:17px}
       .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--secondary-text-color);margin-bottom:8px}
       .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
-      .chart-wrap{position:relative;max-width:100%;width:100%;overflow:visible}\n      svg{width:100%;height:auto;max-height:430px;display:block}\n      .chart-tooltip{position:absolute;z-index:10;pointer-events:none;background:var(--card-background-color,#fff);color:var(--primary-text-color);box-shadow:0 2px 10px #0003;border:1px solid var(--divider-color,#ccc);border-radius:8px;padding:8px 12px;font-size:12px;display:none;white-space:nowrap}\n      @media(max-width:580px){ha-card{padding:10px}.bars{gap:3px}.day{font-size:9px}h3{font-size:14px}}
+      .chart-wrap{position:relative;max-width:100%;width:100%;overflow:visible}\n      svg{width:100%;height:auto;display:block}\n      .chart-tooltip{position:absolute;z-index:10;pointer-events:none;background:var(--card-background-color,#fff);color:var(--primary-text-color);box-shadow:0 2px 10px #0003;border:1px solid var(--divider-color,#ccc);border-radius:8px;padding:8px 12px;font-size:12px;display:none;white-space:nowrap}\n      @media(max-width:580px){ha-card{padding:10px}.bars{gap:3px}.day{font-size:9px}h3{font-size:14px}}
       .bars{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:7px;align-items:end;height:140px;margin-top:16px}
       .day{display:flex;flex-direction:column;align-items:center;justify-content:end;height:100%;gap:4px;font-size:10px}
       .bar{width:100%;max-width:54px;background:#18a58c;border-radius:5px 5px 0 0;min-height:2px}
@@ -143,8 +144,9 @@ class SolarComparisonCard extends HTMLElement {
     if(svg && tip){
       const move=ev=>{
         const rect=svg.getBoundingClientRect();
-        const px=Math.max(55,Math.min(834,(ev.clientX-rect.left)*850/rect.width));
-        const hour=(px-55)/779*24;
+        const g=this._plotGeometry||{W:850,l:55,r:16};
+        const px=Math.max(g.l,Math.min(g.W-g.r,(ev.clientX-rect.left)*g.W/rect.width));
+        const hour=(px-g.l)/(g.W-g.l-g.r)*24;
         const near=(line)=>{
           if(!line?.length)return null;
           let p=line.reduce((a,b)=>Math.abs(a[0]-hour)<Math.abs(b[0]-hour)?a:b);
