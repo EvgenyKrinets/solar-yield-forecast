@@ -64,7 +64,7 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
             attrs.update({
                 "date": values.get(f"forecast_date_{which}"),
                 "points": values.get(f"power_profile_{which}", []),
-                "point_semantics": "preceding hourly mean at interval midpoint, watts",
+                "point_semantics": "15-minute interpolated display points from hourly means, watts (not independent forecast)",
             })
         elif self.key == "forward_error":
             attrs["daily_errors"] = values.get("forecast_accuracy_history", [])
