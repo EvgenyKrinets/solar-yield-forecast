@@ -7,10 +7,12 @@ class SolarComparisonCard extends HTMLElement {
       forecast_entity: 'sensor.solar_yield_forecast_power_profile_today',
       day_forecast_entity: 'sensor.solar_yield_forecast_today',
       energy_entity: 'sensor.daily_pv_generation',
+      size: 'wide',
       ...config
     };
     this._root = this.shadowRoot || this.attachShadow({mode: 'open'});
     this._history = null;
+    this._compact = this.config.size === 'compact';
     this._date = '';
     this._render();
   }
@@ -102,6 +104,8 @@ class SolarComparisonCard extends HTMLElement {
       <style>
       :host{display:block;color:var(--primary-text-color)}
       ha-card{padding:16px;overflow:hidden}
+      :host{width:100%;min-width:0}
+      .bars{min-width:0}
       h3{margin:0 0 10px;font-size:17px}
       .legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--secondary-text-color);margin-bottom:8px}
       .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
@@ -122,9 +126,17 @@ class SolarComparisonCard extends HTMLElement {
       ${this._error?'<p class="small">История: '+esc(this._error)+'</p>':''}
       </ha-card>`;
   }
-  getGridOptions(){return {columns:'full',rows:8,min_rows:5};}
-  getCardSize(){return 7;}
+  getGridOptions(){return this.config?.size === 'compact' ? {columns:6,rows:6,min_rows:4} : {columns:'full',rows:8,min_rows:5};}
+  getCardSize(){return this.config?.size === 'compact' ? 5 : 8;}
 }
 if(!customElements.get('solar-comparison-card'))customElements.define('solar-comparison-card',SolarComparisonCard);
 window.customCards=window.customCards||[];
-window.customCards.push({type:'solar-comparison-card',name:'Solar Comparison Card',description:'Вчера / сегодня / прогноз и недельные столбики'});
+window.customCards.push({type:'solar-comparison-card',name:'Solar Comparison — широкий',description:'На всю ширину секции, три кривые и 8 дней',preview:true,documentationURL:'https://github.com/EvgenyKrinets/solar-yield-forecast'});
+window.customCards.push({type:'solar-comparison-compact',name:'Solar Comparison — компактный',description:'Компактный график для обычной колонки',preview:true});
+
+class SolarComparisonCompactCard extends SolarComparisonCard {
+  setConfig(config) {
+    super.setConfig({ ...config, size: 'compact' });
+  }
+}
+if(!customElements.get('solar-comparison-compact')) customElements.define('solar-comparison-compact', SolarComparisonCompactCard);
