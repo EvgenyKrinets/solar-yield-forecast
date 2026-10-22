@@ -7,3 +7,9 @@ day_forecast_entity: sensor.solar_yield_forecast_today
 grid_options:
   columns: full
   rows: 8
+
+# Compact alternative:
+# type: custom:solar-comparison-compact
+# grid_options:
+#   columns: 6
+#   rows: 6
