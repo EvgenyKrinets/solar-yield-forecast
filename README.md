@@ -29,3 +29,8 @@ Download [solar-comparison-card.js](https://raw.githubusercontent.com/EvgenyKrin
 - Forward accuracy requires future completed days and will initially be `unknown`.
 - Past daily values are recorded only if Home Assistant sensors update correctly. Continuous daylight clipping is not detected automatically.
 - Automated HACS installation requires a public GitHub repository; project files alone do not publish it.
+## Automatic card installation (v0.4.0)
+
+The integration now bundles and automatically loads `solar-comparison-card` after Home Assistant restart. No manual JavaScript copy or Lovelace Resource registration is necessary. HACS installs the integration, then the user adds the card to the desired dashboard using [`dashboard.yaml`](./dashboard.yaml). Remove any older `/local/solar-comparison-card.js` resource to prevent an outdated duplicate from loading.
+
+For a card three standard columns wide, use a **Sections** dashboard: configure a 3-column section span, place the card in that section, and choose **Full width card**. The YAML sets `grid_options.columns: full`. Masonry dashboards cannot natively span a single card across three columns.
