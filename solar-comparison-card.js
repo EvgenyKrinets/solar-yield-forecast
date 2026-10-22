@@ -9,7 +9,7 @@ class SolarComparisonCard extends HTMLElement {
       energy_entity: 'sensor.daily_pv_generation',
       ...config
     };
-    this._root = this.attachShadow({mode: 'open'});
+    this._root = this.shadowRoot || this.attachShadow({mode: 'open'});
     this._history = null;
     this._date = '';
     this._render();
@@ -18,14 +18,16 @@ class SolarComparisonCard extends HTMLElement {
     this._hass = hass;
     if (!this._root) return;
     const today = new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Jerusalem', year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-    if (this._date !== today || !this._history) {
+    if (this._date !== today || (!this._loading && (!this._lastFetch || Date.now() - this._lastFetch > 300000))) {
       this._date = today;
       this._fetch();
     }
     this._render();
   }
   async _fetch() {
-    if (!this._hass) return;
+    if (!this._hass || this._loading) return;
+    this._loading = true;
+    this._lastFetch = Date.now();
     try {
       const state = this._hass.states[this.config.pv_entity];
       const end = new Date();
@@ -39,6 +41,7 @@ class SolarComparisonCard extends HTMLElement {
       this._error = String(e);
       this._history = [];
     }
+    this._loading = false;
     this._render();
   }
   _svg() {
