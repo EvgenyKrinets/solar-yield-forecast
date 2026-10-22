@@ -34,3 +34,7 @@ Download [solar-comparison-card.js](https://raw.githubusercontent.com/EvgenyKrin
 The integration now bundles and automatically loads `solar-comparison-card` after Home Assistant restart. No manual JavaScript copy or Lovelace Resource registration is necessary. HACS installs the integration, then the user adds the card to the desired dashboard using [`dashboard.yaml`](./dashboard.yaml). Remove any older `/local/solar-comparison-card.js` resource to prevent an outdated duplicate from loading.
 
 For a card three standard columns wide, use a **Sections** dashboard: configure a 3-column section span, place the card in that section, and choose **Full width card**. The YAML sets `grid_options.columns: full`. Masonry dashboards cannot natively span a single card across three columns.
+
+## Two card sizes (v0.4.1)
+
+The **Wide** card uses `custom:solar-comparison-card` and requests the whole available section width. The **Compact** card uses `custom:solar-comparison-compact` and requests six grid columns. In Sections dashboards, choose where to place each card and drag it to a desired section. A three-column section span allows the wide card to cover three standard columns. Both card types are auto-loaded by the integration; no separate frontend installation.
