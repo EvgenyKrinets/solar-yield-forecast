@@ -20,6 +20,9 @@ jobs:
       - run: pip install pytest
       - run: python -m pytest -q tests
       - run: node --test tests/test_card.cjs
+      - run: npm install --no-save playwright@1.58.2
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/browser.cjs
       - run: python -m compileall -q custom_components
       - name: Package and publish
         env:

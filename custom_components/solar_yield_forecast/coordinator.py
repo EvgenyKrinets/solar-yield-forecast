@@ -173,7 +173,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         try:
             now = datetime.now(timezone.utc)
             await self._maybe_refresh_archive(now)
-            self.forecast_rows = await self._get_groups(API_FORECAST, {"forecast_days": 8, "past_days": 0, "minutely_15": "global_tilted_irradiance,temperature_2m,wind_speed_10m"})
+            # Radiation timestamps label interval ends: include the next midnight
+            # so the eighth displayed day also contains its final hour.
+            self.forecast_rows = await self._get_groups(API_FORECAST, {"forecast_days": 9, "past_days": 0, "minutely_15": "global_tilted_irradiance,temperature_2m,wind_speed_10m"})
             return self._build_data()
         except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
             raise UpdateFailed(f"Open-Meteo forecast failed: {exc}") from exc
