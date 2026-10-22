@@ -38,3 +38,7 @@ For a card three standard columns wide, use a **Sections** dashboard: configure 
 ## Two card sizes (v0.4.1)
 
 The **Wide** card uses `custom:solar-comparison-card` and requests the whole available section width. The **Compact** card uses `custom:solar-comparison-compact` and requests six grid columns. In Sections dashboards, choose where to place each card and drag it to a desired section. A three-column section span allows the wide card to cover three standard columns. Both card types are auto-loaded by the integration; no separate frontend installation.
+
+## v0.5.0 interactive plot and quarter-hour analysis
+
+Hover or touch the time plot for the previous-day, current-day, and forecast power values. Actual history is binned into 15-minute averages. The weather profile is interpolated to 15-minute display points from hourly radiation (not independent 15-minute weather predictions in Israel). Forecast refresh is scheduled every 15 minutes; raw daily energy is still integrated from the original hourly means. Restart HA after updating in HACS.
