@@ -210,7 +210,7 @@ class SolarComparisonCard extends HTMLElement {
         const values=(this._series||[]).map(near);
         if(values.every(v=>v===null)){tip.style.display='none';if(guide)guide.setAttribute('opacity','0');return;}
         const timeHour=Math.floor(hour),timeMin=Math.floor((hour-timeHour)*4)*15;
-        tip.innerHTML='<b>'+String((timeHour+Math.floor(timeMin/60))%24).padStart(2,'0')+':'+String(timeMin%60).padStart(2,'0')+'</b><div style="color:#3478f6">Вчера: '+(values[0]===null?'—':(values[0]/1000).toFixed(2)+' кВт')+'</div><div style="color:#e0aa12">Сегодня (факт): '+(values[1]===null?'—':(values[1]/1000).toFixed(2)+' кВт')+'</div><div style="color:#16a06a">Прогноз: '+(values[2]===null?'—':(values[2]/1000).toFixed(2)+' кВт')+'</div>';
+        tip.innerHTML='<b>'+String((timeHour+Math.floor(timeMin/60))%24).padStart(2,'0')+':'+String(timeMin%60).padStart(2,'0')+'</b><div><span aria-hidden="true" style="color:#3478f6">●</span> Вчера: '+(values[0]===null?'—':(values[0]/1000).toFixed(2)+' кВт')+'</div><div><span aria-hidden="true" style="color:#e0aa12">●</span> Сегодня (факт): '+(values[1]===null?'—':(values[1]/1000).toFixed(2)+' кВт')+'</div><div><span aria-hidden="true" style="color:#16a06a">●</span> Прогноз: '+(values[2]===null?'—':(values[2]/1000).toFixed(2)+' кВт')+'</div>';
         if(values[1]!==null) tip.innerHTML+='<div>Энергия за 15 мин: '+(values[1]/4000).toFixed(3)+' кВт·ч</div>';
         if(values[1]!==null && values[2]>0) tip.innerHTML+='<div>Отклонение: '+(100*(values[1]-values[2])/values[2]).toFixed(1)+'%</div>';
         tip.style.display='block';
