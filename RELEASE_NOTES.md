@@ -1,3 +1,9 @@
+## 1.0.1 — Installed-capacity review
+
+- Add a final review step to both initial setup and Configure flows.
+- Show each group as panel count × panel wattage = group kWp, together with its tilt and azimuth.
+- Show total panel count and total installed system capacity at the bottom before saving.
+
 ## 1.0.0 — Configurable sites and panel groups
 
 - Replace the fixed Dimona array with a multi-step Home Assistant setup wizard. Use the HA home location as the default, while allowing a custom site/city name, latitude, longitude and IANA time zone.

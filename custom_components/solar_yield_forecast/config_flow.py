@@ -90,6 +90,23 @@ def _stored_group(values, number):
     }
 
 
+def _summary_placeholders(groups):
+    """Return a readable per-group capacity list and the system total."""
+    lines = []
+    for index, group in enumerate(groups, 1):
+        capacity = float(group["kwp"])
+        lines.append(
+            f"- **{index}. {group['name']}:** {group['count']} × "
+            f"{group['panel_power_w']} W = **{capacity:.3f} kWp** · "
+            f"↗ {group['tilt']:.1f}° · 🧭 {group['azimuth']:.1f}°"
+        )
+    return {
+        "groups": "\n".join(lines),
+        "total_kwp": f"{sum(float(group['kwp']) for group in groups):.3f}",
+        "panel_count": str(sum(int(group["count"]) for group in groups)),
+    }
+
+
 class SolarYieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Configure a solar site without editing YAML or source files."""
 
@@ -120,15 +137,24 @@ class SolarYieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._groups.append(_stored_group(user_input, number))
             if user_input.get(CONF_ADD_ANOTHER) and len(self._groups) < MAX_PANEL_GROUPS:
                 return await self.async_step_group()
+            return await self.async_step_summary()
+        return self.async_show_form(
+            step_id="group",
+            data_schema=_group_schema(number),
+            description_placeholders={"number": str(number)},
+        )
+
+    async def async_step_summary(self, user_input=None):
+        if user_input is not None:
             await self.async_set_unique_id("solar_yield_forecast_main")
             self._abort_if_unique_id_configured()
             data = {**self._site, CONF_PANEL_GROUPS: self._groups}
             title = self._site.get(CONF_SITE_NAME) or "Solar Yield Forecast"
             return self.async_create_entry(title=title, data=data)
         return self.async_show_form(
-            step_id="group",
-            data_schema=_group_schema(number),
-            description_placeholders={"number": str(number)},
+            step_id="summary",
+            data_schema=vol.Schema({}),
+            description_placeholders=_summary_placeholders(self._groups),
         )
 
     @staticmethod
@@ -181,10 +207,7 @@ class SolarYieldOptionsFlow(config_entries.OptionsFlow):
                 errors["base"] = "at_least_one_group"
                 current = self._existing[self._index] if self._index < len(self._existing) else None
             else:
-                return self.async_create_entry(
-                    title="",
-                    data={**self._site, CONF_PANEL_GROUPS: self._groups},
-                )
+                return await self.async_step_summary()
         number = self._index + 1
         return self.async_show_form(
             step_id="group",
@@ -196,4 +219,16 @@ class SolarYieldOptionsFlow(config_entries.OptionsFlow):
             ),
             errors=errors,
             description_placeholders={"number": str(number)},
+        )
+
+    async def async_step_summary(self, user_input=None):
+        if user_input is not None:
+            return self.async_create_entry(
+                title="",
+                data={**self._site, CONF_PANEL_GROUPS: self._groups},
+            )
+        return self.async_show_form(
+            step_id="summary",
+            data_schema=vol.Schema({}),
+            description_placeholders=_summary_placeholders(self._groups),
         )

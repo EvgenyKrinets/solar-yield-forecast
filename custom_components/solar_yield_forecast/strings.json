@@ -24,6 +24,10 @@
           "azimuth": "Azimuth clockwise from north",
           "add_another": "Add another panel group"
         }
+      },
+      "summary": {
+        "title": "Check installed capacity",
+        "description": "Calculated panel groups:\n\n{groups}\n\n**Total: {panel_count} panels — {total_kwp} kWp**\n\nSubmit to save this system configuration."
       }
     },
     "abort": {
@@ -59,6 +63,10 @@
           "include_group": "Keep this group",
           "add_another": "Add another group after the existing groups"
         }
+      },
+      "summary": {
+        "title": "Check installed capacity",
+        "description": "Calculated panel groups:\n\n{groups}\n\n**Total: {panel_count} panels — {total_kwp} kWp**\n\nSubmit to apply the changes."
       }
     },
     "error": {
