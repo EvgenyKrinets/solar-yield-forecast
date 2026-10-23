@@ -73,7 +73,7 @@ function solarPatch(parent, template) {
   });
   while(parent.childNodes.length>template.childNodes.length)parent.lastChild.remove();
 }
-const solarDay = date => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jerusalem',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
+const solarDay = (date,timeZone='Asia/Jerusalem') => new Intl.DateTimeFormat('en-CA', {timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
 function solarShift(day, amount, unit='day') {
   const d=new Date(day+'T12:00:00Z');
   if(unit==='month'){d.setUTCDate(1);d.setUTCMonth(d.getUTCMonth()+amount);}
@@ -82,10 +82,10 @@ function solarShift(day, amount, unit='day') {
   return d.toISOString().slice(0,10);
 }
 // Convert a local calendar midnight with the offset at that date (including DST).
-function solarMidnight(day) {
+function solarMidnight(day,timeZone='Asia/Jerusalem') {
   let t=Date.parse(day+'T00:00:00Z');
   for(let i=0;i<3;i++){
-    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jerusalem',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t));
+    const parts=new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(t));
     const v=Object.fromEntries(parts.map(p=>[p.type,p.value]));
     t+=Date.parse(day+'T00:00:00Z')-Date.parse(`${v.year}-${v.month}-${v.day}T${v.hour}:${v.minute}:${v.second}Z`);
   }
@@ -121,12 +121,16 @@ class SolarComparisonCard extends HTMLElement {
     const previous = this._hass;
     this._hass = hass;
     if (!this._root) return;
-    const today = new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Jerusalem', year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const today=solarDay(new Date(),this._timeZone());
+    if(!previous)this._selected=today;
     if (this._date !== today || (!this._loading && (!this._lastFetch || Date.now() - this._lastFetch > 300000))) {
       this._date = today;
       this._fetch();
     }
     if (!previous || [this.config.forecast_entity, this.config.day_forecast_entity].some(id => previous.states[id] !== hass.states[id])) this._render();
+  }
+  _timeZone(){
+    return this.config?.time_zone||this._hass?.states?.[this.config?.day_forecast_entity]?.attributes?.site_configuration?.time_zone||this._hass?.config?.time_zone||Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
   }
   async _fetch() {
     if (!this._hass || this._period!=='day') return;
@@ -135,8 +139,9 @@ class SolarComparisonCard extends HTMLElement {
     this._lastFetch = Date.now();
     try {
       const state = this._hass.states[this.config.pv_entity];
-      const end = new Date(Math.min(Date.now(),solarMidnight(solarShift(this._selected,1))));
-      const start = new Date(solarMidnight(solarShift(this._selected,-1)));
+      const tz=this._timeZone();
+      const end = new Date(Math.min(Date.now(),solarMidnight(solarShift(this._selected,1),tz)));
+      const start = new Date(solarMidnight(solarShift(this._selected,-1),tz));
       this._historyEnd=end.getTime();
       if(start>=end){this._history=[];this._loading=false;this._render();return;}
       const url = 'history/period/' + encodeURIComponent(start.toISOString()) +
@@ -155,7 +160,7 @@ class SolarComparisonCard extends HTMLElement {
     this._render();
   }
   _svg() {
-    const tz='Asia/Jerusalem';
+    const tz=this._timeZone();
     const f=new Intl.DateTimeFormat('en-GB',{timeZone:tz,hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
     const dayFmt=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'});
     const today=this._selected;
@@ -315,7 +320,7 @@ class SolarComparisonCard extends HTMLElement {
     this._root.querySelectorAll('[data-period]').forEach(el=>el.onclick=()=>this._select(this._selected,el.dataset.period));
     this._root.querySelectorAll('[data-step]').forEach(el=>el.onclick=()=>this._select(solarShift(this._selected,Number(el.dataset.step)*(this._period==='week'?7:1),this._period)));
     this._root.querySelector('input[type=date]').onchange=ev=>this._select(ev.target.value);
-    this._root.querySelector('.now').onclick=()=>this._select(solarDay(new Date()));
+    this._root.querySelector('.now').onclick=()=>this._select(solarDay(new Date(),this._timeZone()));
     this._root.querySelector('.reset').onclick=()=>{this._view=[0,24];this._render();};
     this._root.querySelector('.expand').onclick=()=>{this.toggleAttribute('expanded');this._render();};
     this._root.querySelectorAll('[data-toggle]').forEach(el=>el.onclick=()=>{const i=Number(el.dataset.toggle);this._visible[i]=!this._visible[i];this._render();});

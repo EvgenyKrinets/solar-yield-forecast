@@ -1,3 +1,14 @@
+## 1.0.0 — Configurable sites and panel groups
+
+- Replace the fixed Dimona array with a multi-step Home Assistant setup wizard. Use the HA home location as the default, while allowing a custom site/city name, latitude, longitude and IANA time zone.
+- Select the daily energy and live PV power entities from the UI.
+- Add up to 12 panel groups with independent names, panel counts, panel wattages, tilts and north-clockwise azimuths.
+- Add an Options flow so all site and array settings can be changed later without deleting the integration. Saving options reloads the entry automatically and preserves its private history.
+- Keep the former 48 × 670 W five-group configuration as a compatibility fallback for existing entries. New installations store their own array definition.
+- Calculate local days, profiles, calibration and Recorder ingestion in the configured site time zone.
+
+Update through HACS and restart Home Assistant. Existing users can open **Configure** to review or change the original groups; no reinstallation is required.
+
 ## 0.9.1 — Adaptive fallback for short Recorder history
 
 - Fix the practical reason a stable real production curve could still show the uncorrected broad physical forecast: 0.9.0 required 19 complete **power-history** days, while Home Assistant Recorder often retains fewer even when daily energy totals exist for months.

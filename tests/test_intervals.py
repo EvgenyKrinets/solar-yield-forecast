@@ -1,6 +1,7 @@
 from test_model import *
-from datetime import datetime, timedelta
-from solar_yield_forecast.model import TZ, forecast_summary, merge_quarter_hourly, hourly_power_profile, combine_weather
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+from solar_yield_forecast.model import TZ, day_of_hour, forecast_summary, merge_quarter_hourly, hourly_power_profile, combine_weather
 
 def test_quarter_energy_and_remaining():
     start = datetime(2026, 10, 22, 12, tzinfo=TZ)
@@ -10,6 +11,11 @@ def test_quarter_energy_and_remaining():
     assert result['today'] == 13.5
     assert result['current_kw'] == 4
     assert sum(p['energy_kwh'] for p in result['power_profile_today']) == 4
+
+def test_site_timezone_controls_local_forecast_day():
+    stamp=datetime(2026,1,2,0,30,tzinfo=timezone.utc).timestamp()
+    assert day_of_hour(stamp, 3600, ZoneInfo("Europe/London")) == "2026-01-02"
+    assert day_of_hour(stamp, 3600, ZoneInfo("America/Los_Angeles")) == "2026-01-01"
 
 def test_thirty_day_summary_keeps_eight_day_total_separate():
     now=datetime(2026,10,22,tzinfo=TZ)

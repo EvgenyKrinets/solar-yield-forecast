@@ -36,11 +36,12 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = dev_class
         self._attr_state_class = SensorStateClass.MEASUREMENT
+        capacity = sum(float(group.get("kwp", 0)) for group in coordinator.groups)
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": "Solar Yield Forecast",
+            "name": coordinator.config.get("site_name", entry.title),
             "manufacturer": "Local custom integration / Open-Meteo",
-            "model": "32.16 kWp / 5 orientations",
+            "model": f"{capacity:.2f} kWp / {len(coordinator.groups)} orientations",
         }
     @property
     def native_value(self):
@@ -62,6 +63,7 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
                 "shape_factors_utc": values.get("shape_factors_utc", {}),
                 "forecast_baselines": values.get("forecast_baselines", {}),
                 "power_comparisons": values.get("comparison_history", []),
+                "site_configuration": values.get("site", {}),
             })
         elif self.key == "tomorrow":
             attrs["hourly_forecast"] = values.get("hourly_tomorrow", [])

@@ -70,6 +70,11 @@ test('Israel calendar midnight respects the DST transition',()=>{
  assert.equal(new Date(ctx.solarMidnight('2026-10-26')).toISOString(),'2026-10-25T22:00:00.000Z');
  assert.equal(ctx.solarMidnight('2026-10-26')-ctx.solarMidnight('2026-10-25'),25*3600000);
 });
+test('configured site timezone controls calendar boundaries',()=>{
+ assert.equal(new Date(ctx.solarMidnight('2026-03-07','America/New_York')).toISOString(),'2026-03-07T05:00:00.000Z');
+ assert.equal(new Date(ctx.solarMidnight('2026-03-09','America/New_York')).toISOString(),'2026-03-09T04:00:00.000Z');
+ assert.equal(vm.runInContext("solarDay(new Date('2026-01-01T01:00:00Z'),'America/Los_Angeles')",ctx),'2025-12-31');
+});
 
 test('late history response cannot replace a newer selected date',async()=>{
  const Card=vm.runInContext('SolarComparisonCard',ctx),card=new Card();
