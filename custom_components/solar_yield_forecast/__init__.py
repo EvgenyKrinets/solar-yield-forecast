@@ -11,7 +11,7 @@ from .coordinator import SolarYieldCoordinator
 
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/api/{DOMAIN}/solar-comparison-card.js"
-FRONTEND_VERSION = "0.8.0"
+FRONTEND_VERSION = "0.8.1"
 
 
 async def async_setup(hass, config):

@@ -51,6 +51,28 @@ function solarSmoothPath(points, x, y, smooth = true, baseline = null) {
     return path;
   }).join(' ');
 }
+function solarTimeLabel(hour) {
+  const minutes=Math.max(0,Math.min(1440,Math.round(hour*60)));
+  return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');
+}
+// Preserve the card and controls: replacing the entire shadow tree resets
+// scrolling/focus in the HA mobile webview, especially in expanded mode.
+function solarPatch(parent, template) {
+  [...template.childNodes].forEach((next,i)=>{
+    const old=parent.childNodes[i];
+    if(!old){parent.append(next.cloneNode(true));return;}
+    if(old.nodeType!==next.nodeType||old.nodeName!==next.nodeName||next.classList?.contains('chart-wrap')){
+      old.replaceWith(next.cloneNode(true));return;
+    }
+    if(next.nodeType===3){if(old.textContent!==next.textContent)old.textContent=next.textContent;return;}
+    if(next.nodeType!==1)return;
+    for(const attr of [...old.attributes])if(!next.hasAttribute(attr.name))old.removeAttribute(attr.name);
+    for(const attr of [...next.attributes])if(old.getAttribute(attr.name)!==attr.value)old.setAttribute(attr.name,attr.value);
+    if(next.tagName==='INPUT'&&old.value!==next.value)old.value=next.value;
+    solarPatch(old,next);
+  });
+  while(parent.childNodes.length>template.childNodes.length)parent.lastChild.remove();
+}
 const solarDay = date => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Jerusalem',year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
 function solarShift(day, amount, unit='day') {
   const d=new Date(day+'T12:00:00Z');
@@ -168,7 +190,7 @@ class SolarComparisonCard extends HTMLElement {
       svg+='<text x="'+(l-8)+'" y="'+(py+4)+'" text-anchor="end" fill="currentColor" font-size="13">'+(y/1000).toFixed(1)+'</text>';
     }
     svg+='<text x="'+l+'" y="14" fill="currentColor" font-size="12">кВт</text>';
-    for(let h=lo;h<=hi+.001;h+=(hi-lo)/(W<540?4:8))svg+='<text x="'+xx(h)+'" y="'+(H-14)+'" text-anchor="middle" fill="currentColor" font-size="13">'+String(h).padStart(2,'0')+':00</text>';
+    for(let h=lo;h<=hi+.001;h+=(hi-lo)/(W<540?4:8))svg+='<text x="'+xx(h)+'" y="'+(H-14)+'" text-anchor="middle" fill="currentColor" font-size="13">'+solarTimeLabel(h)+'</text>';
     svg+='<defs><clipPath id="plot-clip"><rect x="'+l+'" y="'+t+'" width="'+(W-l-r)+'" height="'+(H-t-b)+'"/></clipPath></defs><g clip-path="url(#plot-clip)">';
     const colors=['#3478f6','#ff9e3d','#16a06a'];
     series.forEach(line=>line.sort((a,b)=>a[0]-b[0]));
@@ -189,7 +211,10 @@ class SolarComparisonCard extends HTMLElement {
     const days=todayForecast?.attributes?.daily_forecast||[];
     const max=Math.max(1,...days.map(d=>Number(d.kwh)||0));
     const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
-    this._root.innerHTML=`
+    const scroll=[];
+    for(let el=this;el;el=el.parentElement||el.getRootNode()?.host){scroll.push([el,el.scrollLeft,el.scrollTop]);}
+    const template=document.createElement('template');
+    template.innerHTML=`
       <style>
       :host{display:block;color:var(--primary-text-color,#263238);font-family:var(--ha-font-family-body,Roboto,system-ui,-apple-system,"Segoe UI",sans-serif);font-size:14px;line-height:1.5;font-variant-numeric:tabular-nums}
       ha-card{display:block;box-sizing:border-box;padding:16px;overflow:hidden;container-type:inline-size}
@@ -238,6 +263,8 @@ class SolarComparisonCard extends HTMLElement {
       <p class="small">Разведите два пальца для увеличения графика дня; после увеличения перемещайте его пальцем. Двойное нажатие сбрасывает масштаб. Мощность усреднена за 15 минут. ${this.config.smooth!==false?'Линии сглажены; значения в подсказках и энергия рассчитаны по исходным точкам. ':''}Пропуски измерений не заполняются. В Израиле погодные данные интерполируются из часовых.</p>
       ${this._error?'<p class="small">История: '+esc(this._error)+'</p>':''}
       </ha-card>`;
+    solarPatch(this._root,template.content);
+    for(const [el,x,y] of scroll){el.scrollLeft=x;el.scrollTop=y;}
     this._bindControls();
     const wrapper=this._root.querySelector('.chart-wrap'), svg=wrapper?.querySelector('svg');
     const tip=wrapper?.querySelector('.chart-tooltip'), guide=wrapper?.querySelector('.cursorline');

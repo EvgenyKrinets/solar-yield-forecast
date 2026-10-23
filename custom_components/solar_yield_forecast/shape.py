@@ -4,6 +4,29 @@ from collections import defaultdict
 from statistics import median
 from math import isfinite
 
+def shape_at(stamp, factors):
+    """Interpolate UTC hourly corrections between hour centres, without steps."""
+    hour = (stamp / 3600 - .5) % 24
+    left = int(hour)
+    fraction = hour - left
+    a = factors.get(str(left), 1.0)
+    b = factors.get(str((left + 1) % 24), 1.0)
+    return a + (b - a) * fraction
+
+
+def interval_shape(start, seconds, factors):
+    """Integrate the piecewise-linear correction exactly over the interval."""
+    if not factors:
+        return 1.0
+    end = start + seconds
+    cursor, total = start, 0.0
+    while cursor < end:
+        boundary = (int((cursor - 1800) // 3600) + 1) * 3600 + 1800
+        stop = min(end, boundary)
+        total += shape_at((cursor + stop) / 2, factors) * (stop - cursor)
+        cursor = stop
+    return total / seconds
+
 def power_hours(states, end):
     """Integrate held states in UTC; missing/invalid states break coverage."""
     rows = sorted(states, key=lambda x: x[0])
@@ -50,7 +73,7 @@ def learn_shape(hours, weather, factor, today, tz):
     if len(test)<12 or total<30:
         return {}, report
     before = sum(abs(s[2]-s[3]) for s in test)/total
-    after = sum(abs(s[2]-s[3]*factors[str(s[1])]) for s in test)/total
+    after = sum(abs(s[2]-s[3]*interval_shape(s[1]*3600,3600,factors)) for s in test)/total
     accepted = after < before*.9
     report.update(status='active' if accepted else 'no_validated_improvement',
                   before_wape_percent=round(before*100,2), after_wape_percent=round(after*100,2))

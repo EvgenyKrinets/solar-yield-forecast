@@ -23,7 +23,7 @@ def test_holdout_approves_repeatable_bias():
     actual,weather=fixture(lambda d,h:.5 if h>=15 else 1.1)
     factors,report=learn_shape(actual,weather,1,'2026-10-16',TZ)
     assert report['status']=='active'
-    assert report['after_wape_percent']==0
+    assert report['after_wape_percent'] < report['before_wape_percent'] * .9
     assert factors['15']==.5
 
 def test_holdout_rejects_changed_pattern():
@@ -40,7 +40,24 @@ def test_insufficient_and_partial_history():
 def test_shape_and_model_total_separate_from_actual():
     start=datetime(2026,10,22,12,tzinfo=TZ)
     row={'end':start.timestamp()+900,'kw':4,'interval_seconds':900}
-    result=forecast_summary([row],1,90,start+timedelta(hours=2),{str(start.astimezone(timezone.utc).hour):.5})
+    result=forecast_summary([row],1,90,start+timedelta(hours=2),{str(h):.5 for h in range(24)})
     assert result['today']==90
     assert result['model_today']==.5
     assert result['power_profile_today'][0]['power_w']==2000
+
+
+def test_shape_continuity_and_interval_energy():
+    from solar_yield_forecast.shape import shape_at, interval_shape
+    factors = {'10':1.2, '11':.8, '12':1.1}
+    assert abs(shape_at(11*3600-.001,factors)-shape_at(11*3600+.001,factors)) < 1e-6
+    hourly=interval_shape(11*3600,3600,factors)
+    quarters=sum(interval_shape(11*3600+i*900,900,factors) for i in range(4))/4
+    assert abs(hourly-quarters)<1e-12
+    assert interval_shape(0,3600,{})==1
+
+
+def test_shape_is_continuous_at_missing_hour_boundaries():
+    from solar_yield_forecast.shape import shape_at
+    for hour in [9.5,10.5,11.5,23.5,24.5]:
+        t=hour*3600
+        assert abs(shape_at(t-.001,{'10':.5})-shape_at(t+.001,{'10':.5}))<1e-6
