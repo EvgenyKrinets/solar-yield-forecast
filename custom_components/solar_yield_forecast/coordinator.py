@@ -2,7 +2,7 @@
 from __future__ import annotations
 import asyncio
 from functools import partial
-from .shape import power_hours, learn_shape
+from .shape import interval_shape, power_hours, learn_shape
 import logging
 import math
 from datetime import datetime, timedelta, timezone
@@ -15,7 +15,7 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.core import callback
-from .const import (DOMAIN, PANEL_GROUPS, API_ARCHIVE, API_FORECAST, DEFAULT_DAILY_SENSOR, TIMEZONE)
+from .const import (DOMAIN, PANEL_GROUPS, API_ARCHIVE, API_ENSEMBLE, API_FORECAST, DEFAULT_DAILY_SENSOR, TIMEZONE)
 from .model import (TZ, combine_weather, calibration, forecast_summary, open_meteo_azimuth, merge_quarter_hourly)
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.store = Store(hass, 1, f"{DOMAIN}_{entry.entry_id}")
         self.actuals: dict[str, float] = {}
         self.forecast_rows = []
+        self.ensemble_rows = []
         self.shape_factors = {}
         self.shape_report = {"status": "not_loaded"}
         self._shape_day = None
@@ -40,6 +41,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.live_comparisons = []
         self._unsub_power = None
         self.archive_last_attempt: datetime | None = None
+        self.ensemble_last_attempt: datetime | None = None
         self._unsub_energy = None
 
     async def async_initialize(self):
@@ -95,6 +97,64 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             except ValueError:
                 _LOGGER.warning("Incomplete 15-minute forecast; using hourly means")
         return hourly
+
+    @staticmethod
+    def _ensemble_mean(response):
+        """Collapse individual ensemble members into the provider mean."""
+        hourly = response.get("hourly") or {}
+        times = hourly.get("time") or []
+        result = {"time": times}
+        for variable in ("global_tilted_irradiance", "temperature_2m", "wind_speed_10m"):
+            member_keys = sorted(key for key in hourly if key.startswith(f"{variable}_member"))
+            if member_keys and variable in hourly:
+                member_keys.insert(0, variable)  # un-suffixed control member
+            elif not member_keys and variable in hourly:
+                result[variable] = hourly[variable]
+                continue
+            values = []
+            for index in range(len(times)):
+                members = []
+                for key in member_keys:
+                    row = hourly.get(key) or []
+                    if index < len(row):
+                        try:
+                            value = float(row[index])
+                            if math.isfinite(value):
+                                members.append(value)
+                        except (TypeError, ValueError):
+                            pass
+                values.append(sum(members)/len(members) if members else None)
+            result[variable] = values
+        return {**response, "hourly": result}
+
+    async def _maybe_refresh_ensemble(self, now):
+        """Refresh the lower-resolution 30-day ensemble at most every 6 h."""
+        if self.ensemble_last_attempt is not None and now-self.ensemble_last_attempt < timedelta(hours=6):
+            return
+        self.ensemble_last_attempt = now
+        try:
+            semaphore = asyncio.Semaphore(3)
+            async def get(group):
+                async with semaphore:
+                    response = await self._one_group(API_ENSEMBLE, group, {
+                        "models": "ncep_gefs05", "forecast_days": 31,
+                    })
+                    return self._ensemble_mean(response)
+            responses = await asyncio.gather(*(get(group) for group in PANEL_GROUPS))
+            self.ensemble_rows = combine_weather(responses)
+            for row in self.ensemble_rows:
+                row["forecast_source"] = "ensemble"
+        except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
+            # The accurate 16-day forecast remains usable when the optional
+            # long-range ensemble is temporarily unavailable.
+            _LOGGER.warning("Long-range ensemble unavailable; keeping previous data: %s", exc)
+
+    def _combined_forecast_rows(self):
+        """Prefer the regular high-resolution forecast over ensemble overlap."""
+        combined = {int(row["end"]): row for row in self.forecast_rows}
+        for row in self.ensemble_rows:
+            combined.setdefault(int(row["end"]), row)
+        return [combined[key] for key in sorted(combined)]
 
     async def _maybe_refresh_archive(self, now):
         if self.archive_last_attempt is not None and (now - self.archive_last_attempt < timedelta(hours=20)):
@@ -166,7 +226,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
 
     def _build_data(self):
         now = datetime.now(timezone.utc)
-        result = forecast_summary(self.forecast_rows, self.factor, self._actual_today(now), now, self.shape_factors)
+        result = forecast_summary(self._combined_forecast_rows(), self.factor, self._actual_today(now), now, self.shape_factors)
         result.update({
             "factor_percent": round(self.factor * 100, 1),
             "calibration_days": self.cal_days,
@@ -183,9 +243,11 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         try:
             now = datetime.now(timezone.utc)
             await self._maybe_refresh_archive(now)
-            # Radiation timestamps label interval ends: include the next midnight
-            # so the eighth displayed day also contains its final hour.
-            self.forecast_rows = await self._get_groups(API_FORECAST, {"forecast_days": 9, "past_days": 7, "minutely_15": "global_tilted_irradiance,temperature_2m,wind_speed_10m"})
+            # Thirty retrospective days feed robust shape learning. The regular
+            # API supplies the accurate first 16 days; GFS ensemble extends the
+            # daily estimate to one month.
+            self.forecast_rows = await self._get_groups(API_FORECAST, {"forecast_days": 16, "past_days": 30, "minutely_15": "global_tilted_irradiance,temperature_2m,wind_speed_10m"})
+            await self._maybe_refresh_ensemble(now)
             await self._learn_shape(now)
             return self._build_data()
         except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
@@ -204,7 +266,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             from homeassistant.components.recorder.history import get_significant_states
             entity = self.entry.data.get("dc_power_sensor", "sensor.total_dc_power")
             history = await get_instance(self.hass).async_add_executor_job(partial(
-                get_significant_states, self.hass, now-timedelta(days=7), now,
+                get_significant_states, self.hass, now-timedelta(days=30), now,
                 entity_ids=[entity], significant_changes_only=False,
                 minimal_response=False, no_attributes=False))
             states = []
@@ -266,7 +328,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             now = datetime.now(timezone.utc)
             if self.live_comparisons and (now - datetime.fromisoformat(self.live_comparisons[-1]["time"]) < timedelta(minutes=5)):
                 return
-            predicted = next((r["kw"] * self.factor * self.shape_factors.get(str(datetime.fromtimestamp(r["end"]-r.get("interval_seconds",3600), timezone.utc).hour),1) for r in self.forecast_rows if r["end"] - r.get("interval_seconds", 3600) <= now.timestamp() < r["end"]), None)
+            predicted = next((r["kw"] * self.factor * interval_shape(r["end"]-r.get("interval_seconds",3600), r.get("interval_seconds",3600), self.shape_factors) for r in self.forecast_rows if r["end"] - r.get("interval_seconds", 3600) <= now.timestamp() < r["end"]), None)
             if predicted is None or predicted < 0.2:
                 return
             self.live_comparisons.append({

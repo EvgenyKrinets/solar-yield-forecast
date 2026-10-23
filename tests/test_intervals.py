@@ -11,6 +11,19 @@ def test_quarter_energy_and_remaining():
     assert result['current_kw'] == 4
     assert sum(p['energy_kwh'] for p in result['power_profile_today']) == 4
 
+def test_thirty_day_summary_keeps_eight_day_total_separate():
+    now=datetime(2026,10,22,tzinfo=TZ)
+    rows=[]
+    for day in range(30):
+        rows.append({'end':(now+timedelta(days=day,hours=1)).timestamp(),'kw':day+1,
+                     'forecast_source':'ensemble' if day>=16 else 'weather'})
+    result=forecast_summary(rows,1,None,now)
+    assert len(result['daily'])==30
+    assert result['next_7_days']==sum(range(2,9))
+    assert result['next_30_days']==sum(range(1,31))
+    assert result['daily'][15]['source']=='weather'
+    assert result['daily'][16]['source']=='ensemble'
+
 def test_fallback_no_double_counting():
     hourly = [{'end':3600,'kw':4},{'end':7200,'kw':4}]
     quarters = [{'end':900*i,'kw':4,'interval_seconds':900} for i in range(1,8)]

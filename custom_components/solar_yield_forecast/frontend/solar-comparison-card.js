@@ -1,4 +1,4 @@
-/* Solar Comparison Card: day-aligned Sungrow power and 8-day forecast. */
+/* Solar Comparison Card: day-aligned Sungrow power and 30-day forecast. */
 // Integrate recorder states as a step function, splitting at UTC quarter hours.
 // Unknown/unavailable states break coverage; incomplete intervals are not invented.
 function solarQuarterHours(rows, unit, now = Date.now()) {
@@ -114,7 +114,7 @@ class SolarComparisonCard extends HTMLElement {
     this._history = null;
     this._compact = this.config.size === 'compact';
     this._date = '';
-    this._selected=solarDay(new Date());this._period='day';this._view=[0,24];this._visible=[true,true,true];
+    this._selected=solarDay(new Date());this._period='day';this._view=[0,24];this._visible=[true,true,true];this._forecastRange=8;
     this._render();
   }
   set hass(hass) {
@@ -212,7 +212,8 @@ class SolarComparisonCard extends HTMLElement {
   _render(){
     if(!this._root||!this._hass||this._touching)return;
     const todayForecast=this._hass.states[this.config.day_forecast_entity];
-    const days=todayForecast?.attributes?.daily_forecast||[];
+    const allDays=todayForecast?.attributes?.daily_forecast||[];
+    const days=allDays.slice(0,this._forecastRange||8);
     const max=Math.max(1,...days.map(d=>Number(d.kwh)||0));
     const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
     const scroll=[];
@@ -232,12 +233,15 @@ class SolarComparisonCard extends HTMLElement {
       .chart-tooltip{position:absolute;z-index:10;pointer-events:none;background:var(--card-background-color,#fff);color:var(--primary-text-color,#263238);box-shadow:0 4px 18px #0002;border:1px solid var(--divider-color,#dde2e5);border-radius:10px;padding:12px 16px;font-size:14px;line-height:1.6;display:none;white-space:nowrap;max-width:100%;box-sizing:border-box}
       .chart-tooltip>b{display:block;margin-bottom:4px;font-weight:600}
       .bars{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:12px;align-items:end;height:160px;margin-top:16px}
+      .bars.month{height:auto;row-gap:20px}.bars.month .day{height:150px}
       .day{display:flex;flex-direction:column;align-items:center;justify-content:end;height:100%;gap:8px;font-size:12px}
       .day>b{font-size:14px;font-weight:600}
       .day>span{color:var(--secondary-text-color,#59656e)}
-      .bar{width:100%;max-width:54px;background:#18a58c;border-radius:5px 5px 0 0;min-height:2px}
+      .bar{width:100%;max-width:54px;background:#18a58c;border-radius:5px 5px 0 0;min-height:2px}.day.ensemble .bar{opacity:.68;background:repeating-linear-gradient(135deg,#18a58c 0 6px,#50b9a7 6px 10px)}
       .small{font-size:12px;line-height:1.6;color:var(--secondary-text-color,#59656e);margin:20px 0 0}
       .more{margin-top:20px;font-size:18px}
+      .forecast-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:20px}.forecast-head .more{margin:0}
+      .forecast-range{display:flex;gap:4px;background:var(--secondary-background-color,#f6f6f6);border-radius:22px;padding:2px;flex:none}.forecast-range button{min-height:36px;padding:5px 10px;font-size:12px}.forecast-range button[aria-pressed=true]{background:var(--card-background-color,#fff);box-shadow:0 1px 4px #0002;font-weight:600}
       .unit{font-size:13px;font-weight:400;color:var(--secondary-text-color,#59656e);white-space:nowrap}
       @container(max-width:540px){h3{font-size:18px}.bars{gap:8px;grid-template-columns:repeat(4,minmax(0,1fr));height:auto;row-gap:20px}.day{height:150px}.chart-tooltip{white-space:normal}}
       button{font:inherit;cursor:pointer;color:inherit;border:0;background:transparent;min-height:44px;border-radius:24px;padding:8px 14px}
@@ -262,9 +266,9 @@ class SolarComparisonCard extends HTMLElement {
       <div class="legend">${['Предыдущий день','PV · факт','Прогноз'].map((label,i)=>`<button ${i===0&&this._period!=='day'?'hidden':''} data-toggle="${i}" aria-pressed="${this._visible[i]}" style="--series:${['#3478f6','#ff9e3d','#16a06a'][i]}"><span class="toggle"></span>${label}</button>`).join('')}</div>
       ${this._period==='day'&&!this._series.some(x=>x.length)?'<div class="empty">Нет данных за выбранную дату</div>':''}
       ${this._loading?'<div class="small">Загрузка истории…</div>':''}
-      <h3 class="more">Прогноз выработки на 8 дней <span class="unit">· кВт·ч</span></h3>
-      <div class="bars">${days.map(d=>`<div class="day"><b>${esc(d.kwh)} </b><div class="bar" style="height:${Math.max(2,100*(Number(d.kwh)||0)/max)}px"></div><span>${esc((d.date||'').slice(5))}</span></div>`).join('')}</div>
-      <p class="small">Разведите два пальца для увеличения графика дня; после увеличения перемещайте его пальцем. Двойное нажатие сбрасывает масштаб. Мощность усреднена за 15 минут. ${this.config.smooth!==false?'Линии сглажены; значения в подсказках и энергия рассчитаны по исходным точкам. ':''}Пунктир обозначает короткий пропуск измерений, а не измеренную мощность; энергия за пропуск не вычисляется. В Израиле погодные данные интерполируются из часовых.</p>
+      <div class="forecast-head"><h3 class="more">Прогноз выработки на ${this._forecastRange===30?'30':'8'} дней <span class="unit">· кВт·ч</span></h3><div class="forecast-range"><button data-forecast-range="8" aria-pressed="${this._forecastRange!==30}">8 дней</button><button data-forecast-range="30" aria-pressed="${this._forecastRange===30}">Месяц</button></div></div>
+      <div class="bars ${this._forecastRange===30?'month':''}">${days.map(d=>`<div class="day ${d.source==='ensemble'?'ensemble':''}" title="${d.source==='ensemble'?'Дальний ансамблевый прогноз — точность ниже':'Основной прогноз погоды'}"><b>${esc(d.kwh)} </b><div class="bar" style="height:${Math.max(2,100*(Number(d.kwh)||0)/max)}px"></div><span>${esc((d.date||'').slice(5))}</span></div>`).join('')}</div>
+      <p class="small">Разведите два пальца для увеличения графика дня; после увеличения перемещайте его пальцем. Двойное нажатие сбрасывает масштаб. Мощность усреднена за 15 минут. ${this.config.smooth!==false?'Линии сглажены; значения в подсказках и энергия рассчитаны по исходным точкам. ':''}Пунктир обозначает короткий пропуск измерений, а не измеренную мощность; энергия за пропуск не вычисляется. Полосатые столбцы после основного горизонта — менее точный ансамблевый прогноз GFS.</p>
       ${this._error?'<p class="small">История: '+esc(this._error)+'</p>':''}
       </ha-card>`;
     solarPatch(this._root,template.content);
@@ -315,6 +319,7 @@ class SolarComparisonCard extends HTMLElement {
     this._root.querySelector('.reset').onclick=()=>{this._view=[0,24];this._render();};
     this._root.querySelector('.expand').onclick=()=>{this.toggleAttribute('expanded');this._render();};
     this._root.querySelectorAll('[data-toggle]').forEach(el=>el.onclick=()=>{const i=Number(el.dataset.toggle);this._visible[i]=!this._visible[i];this._render();});
+    this._root.querySelectorAll('[data-forecast-range]').forEach(el=>el.onclick=()=>{this._forecastRange=Number(el.dataset.forecastRange);this._render();});
     this._root.querySelectorAll('[data-date]').forEach(el=>{
       const open=()=>this._select(el.dataset.date,this._period==='year'||this._period==='all'?'month':'day');
       el.onclick=open;el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}};
@@ -406,7 +411,7 @@ class SolarComparisonCard extends HTMLElement {
 }
 if(!customElements.get('solar-comparison-card'))customElements.define('solar-comparison-card',SolarComparisonCard);
 window.customCards=window.customCards||[];
-window.customCards.push({type:'solar-comparison-card',name:'Solar Comparison — широкий',description:'На всю ширину секции, три кривые и 8 дней',preview:true,documentationURL:'https://github.com/EvgenyKrinets/solar-yield-forecast'});
+window.customCards.push({type:'solar-comparison-card',name:'Solar Comparison — широкий',description:'На всю ширину секции, три кривые и прогноз до 30 дней',preview:true,documentationURL:'https://github.com/EvgenyKrinets/solar-yield-forecast'});
 window.customCards.push({type:'solar-comparison-compact',name:'Solar Comparison — компактный',description:'Компактный график для обычной колонки',preview:true});
 
 class SolarComparisonCompactCard extends SolarComparisonCard {

@@ -10,6 +10,7 @@ SENSORS = (
     ("today", "Today", "today", UnitOfEnergy.KILO_WATT_HOUR, None),
     ("tomorrow", "Tomorrow", "tomorrow", UnitOfEnergy.KILO_WATT_HOUR, None),
     ("next_7_days", "Next 7 Days", "next_7_days", UnitOfEnergy.KILO_WATT_HOUR, None),
+    ("next_30_days", "Next 30 Days", "next_30_days", UnitOfEnergy.KILO_WATT_HOUR, None),
     ("remaining_today", "Remaining Today", "remaining_today", UnitOfEnergy.KILO_WATT_HOUR, None),
     ("power_now", "Power Now", "current_kw", UnitOfPower.KILO_WATT, SensorDeviceClass.POWER),
     ("power_profile_today", "Power Profile Today", "peak_today_kw", UnitOfPower.KILO_WATT, SensorDeviceClass.POWER),

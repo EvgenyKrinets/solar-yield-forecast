@@ -55,3 +55,17 @@ They activate only with a 10% relative improvement in retrospective WAPE.
 Invalid states and partial hours are excluded. Recorder failure retains the
 base forecast. No household history is published. A new Model Today sensor
 distinguishes model energy from Today (actual plus remaining).
+
+## 0.9.0 calibration and horizon safeguards
+
+Shape learning reads 30 days and needs at least 19 complete days. Daily
+amplitude is removed before hourly ratios are calculated. Ten samples per UTC
+hour, five validation days, five-hour smoothing, a 3.5% adjacent-factor limit
+and an independent peak-period WAPE check prevent isolated cloudy intervals
+from becoming a permanent midday notch. Failure of any gate uses the base
+physical model.
+
+The regular forecast API supplies the first 16 days. Days 17–30 use the mean
+of the 31-member NCEP GEFS 0.5-degree ensemble. Those long-range values are
+marked `source: ensemble` and rendered as striped bars because their local
+day-to-day accuracy is inherently lower.
