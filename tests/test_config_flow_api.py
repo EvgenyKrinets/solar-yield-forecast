@@ -1,0 +1,61 @@
+"""Regression tests for the Home Assistant options-flow lifecycle."""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+
+CONFIG_FLOW = (
+    Path(__file__).parents[1]
+    / "custom_components"
+    / "solar_yield_forecast"
+    / "config_flow.py"
+)
+
+
+def _class(tree: ast.Module, name: str) -> ast.ClassDef:
+    return next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name
+    )
+
+
+def test_options_flow_uses_config_entry_injected_by_home_assistant() -> None:
+    """The flow must not expect ConfigEntry during object construction."""
+    tree = ast.parse(CONFIG_FLOW.read_text(encoding="utf-8"))
+    config_flow = _class(tree, "SolarYieldConfigFlow")
+    options_flow = _class(tree, "SolarYieldOptionsFlow")
+
+    factory = next(
+        node
+        for node in config_flow.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "async_get_options_flow"
+    )
+    created = next(
+        node.value
+        for node in ast.walk(factory)
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Call)
+    )
+    assert created.args == []
+    assert created.keywords == []
+
+    constructor = next(
+        node
+        for node in options_flow.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    )
+    assert [argument.arg for argument in constructor.args.args] == ["self"]
+
+    init_step = next(
+        node
+        for node in options_flow.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "async_step_init"
+    )
+    assert any(
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "self"
+        and node.attr == "config_entry"
+        for node in ast.walk(init_step)
+    )
