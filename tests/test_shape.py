@@ -10,32 +10,46 @@ def test_weighted_hours_and_invalid_gap():
     assert power_hours([(0,1),(60,3)],3600)[0]==[178/60,3600]
     assert power_hours([(0,1),(1800,None)],3600)[0]==[.5,1800]
 
-def fixture(correction):
+def fixture(correction, days=24):
     weather=[];actual={}
-    for day in range(6):
+    for day in range(days):
         for hour in range(7,18):
-            t=datetime(2026,10,10+day,hour,tzinfo=timezone.utc).timestamp()
+            t=(datetime(2026,9,20,hour,tzinfo=timezone.utc)+timedelta(days=day)).timestamp()
             weather.append({'end':t+3600,'kw':10})
             actual[t]=[10*correction(day,hour),3600]
     return actual,weather
 
 def test_holdout_approves_repeatable_bias():
-    actual,weather=fixture(lambda d,h:.5 if h>=15 else 1.1)
-    factors,report=learn_shape(actual,weather,1,'2026-10-16',TZ)
+    actual,weather=fixture(lambda d,h:.8 if h>=15 else 1.08)
+    factors,report=learn_shape(actual,weather,1,'2026-10-20',TZ)
     assert report['status']=='active'
-    assert report['after_wape_percent'] < report['before_wape_percent'] * .9
-    assert factors['15']==.5
+    assert report['after_wape_percent'] < report['before_wape_percent'] * .95
+    assert factors['15'] < 1
+    assert report['factor_support_utc']['15'] >= 10
 
 def test_holdout_rejects_changed_pattern():
-    actual,weather=fixture(lambda d,h:.5 if d<4 else 1)
-    factors,report=learn_shape(actual,weather,1,'2026-10-16',TZ)
+    actual,weather=fixture(lambda d,h:(.8 if h>=15 else 1.08) if d<19 else 1.0)
+    factors,report=learn_shape(actual,weather,1,'2026-10-20',TZ)
     assert factors=={}
     assert report['status']=='no_validated_improvement'
 
 def test_insufficient_and_partial_history():
     actual,weather=fixture(lambda d,h:.5)
-    assert learn_shape(actual,weather[:44],1,'2026-10-16',TZ)[0]=={}
-    assert learn_shape({k:[v[0],1000] for k,v in actual.items()},weather,1,'2026-10-16',TZ)[0]=={}
+    assert learn_shape(actual,weather[:18*11],1,'2026-10-20',TZ)[0]=={}
+    assert learn_shape({k:[v[0],1000] for k,v in actual.items()},weather,1,'2026-10-20',TZ)[0]=={}
+
+def test_daily_amplitude_is_not_learned_as_hourly_shape():
+    actual,weather=fixture(lambda d,h:.65 if d%3==0 else 1.15)
+    factors,report=learn_shape(actual,weather,1,'2026-10-20',TZ)
+    assert factors=={}
+    assert report['status']=='no_validated_improvement'
+
+def test_hourly_shape_is_smooth_and_cannot_form_a_narrow_notch():
+    actual,weather=fixture(lambda d,h:.82 if h==12 else 1.02)
+    factors,_=learn_shape(actual,weather,1,'2026-10-20',TZ)
+    if factors:
+        ordered=sorted((int(hour),value) for hour,value in factors.items())
+        assert all(abs(a[1]-b[1]) <= .03501 for a,b in zip(ordered,ordered[1:]) if b[0]==a[0]+1)
 
 def test_shape_and_model_total_separate_from_actual():
     start=datetime(2026,10,22,12,tzinfo=TZ)

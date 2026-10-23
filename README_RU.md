@@ -1,10 +1,20 @@
 # Solar Yield Forecast — руководство по установке
 
+## 0.9.0 — устойчивое обучение за 30 дней и прогноз на месяц
+
+Поправка формы теперь обучается по 30 дням истории Recorder. Каждый день
+нормализуется по общей энергии, коэффициенты сглаживаются, а пиковый участок
+проверяется отдельно. Поэтому несколько облачных или неполных часов больше не
+должны создавать искусственную впадину в полдень. Основной прогноз Open-Meteo
+используется для первых 16 дней, затем дневная оценка продлевается до 30 дней
+средним значением ансамбля GFS. Внизу карточки появился переключатель
+**8 дней / Месяц**; полосатые столбцы означают менее точный дальний прогноз.
+
 ## 0.7.0 — intraday calibration / обучение формы
 
-The integration now learns the intraday profile from seven days of local DC
+The integration learns the intraday profile from local DC
 power history. Corrections are enabled only after improving a separate
-two-day retrospective validation by at least 10%; insufficient data leaves
+retrospective validation; insufficient data leaves
 the base forecast active. The hourly correction uses UTC to avoid DST shifts.
 It is combined with the existing daily calibration, and applied to interval
 energy as well as the power curve. Model Today exposes the modeled whole-day
@@ -39,7 +49,7 @@ energy separately from Today (actual plus remaining).
    - `sensor.daily_pv_generation` — энергия за сутки в кВт·ч;
    - `sensor.total_dc_power` — текущая мощность PV (Вт).
 
-После подключения интеграция загружает погоду по каждой из пяти ориентаций и показывает прогноз на сегодня, завтра, 7 дней, почасовой профиль и метрики калибровки.
+После подключения интеграция загружает погоду по каждой из пяти ориентаций и показывает прогноз на сегодня, завтра, 7 и 30 дней, почасовой профиль и метрики калибровки.
 
 **Начиная с версии 0.4.0 карточка включена в интеграцию и загружается автоматически.** Не нужно скачивать JavaScript в `/config/www/` или добавлять его в Dashboard Resources. После установки/обновления через HACS перезапусти Home Assistant и обнови браузер. Добавь карточку вручную из `dashboard.yaml` или выбери Solar Comparison Card в редакторе карточек.
 

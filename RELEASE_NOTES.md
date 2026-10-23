@@ -1,3 +1,13 @@
+## 0.9.0 — Robust 30-day learning and monthly forecast
+
+- Learn the intraday correction from 30 days of Recorder history. Normalise each training day by its daily energy before learning shape, require at least 19 complete days, use five held-out validation days and at least ten observations per corrected UTC hour.
+- Smooth the learned shape over five hours, limit adjacent correction changes to 3.5%, and require the peak-period WAPE not to worsen. A weak or unvalidated correction falls back to the physical forecast instead of drawing an artificial midday notch.
+- Use the regular Open-Meteo forecast for the first 16 days and extend daily estimates to 30 days with the mean of the 31-member, 0.5-degree GFS ensemble. Long-range striped bars are intentionally marked as lower confidence.
+- Add an **8 days / Month** switch below the power chart and a `Solar Yield Forecast Next 30 Days` sensor. The existing 7-day sensor remains compatible.
+- Keep 15-minute touch zoom, calendar navigation, missing-history semantics and stored daily observations unchanged.
+
+Update through HACS, restart Home Assistant and refresh the dashboard. The first start can take longer while the 30-day ensemble and Recorder history are loaded.
+
 ## 0.8.2 — Touch gesture continuity
 
 Keep the SVG and touch targets mounted during pinch updates. Use two-dimensional finger distance and rebase panning when one finger is lifted. Hide tooltips during gestures. Short missing history intervals are shown with explicitly labelled dashed guides; measured curves/fills and energy remain unchanged, and tooltips no longer borrow a neighbour's value inside a missing interval.

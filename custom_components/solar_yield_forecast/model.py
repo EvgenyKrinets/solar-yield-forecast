@@ -100,15 +100,16 @@ def hourly_power_profile(hourly):
 def peak_kw_of_profile(profile):
     return round(max((p["power_w"] for p in profile), default=0) / 1000.0, 2)
 
-def forecast_summary(forecast_rows, factor, actual_today, now, shape=None):
+def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forecast_days=30):
     today = now.astimezone(TZ).date()
     today_iso = today.isoformat()
-    days = [(today + timedelta(days=i)).isoformat() for i in range(8)]
+    days = [(today + timedelta(days=i)).isoformat() for i in range(forecast_days)]
     sums = {d: 0.0 for d in days}
     remaining = 0.0
     live_kw = 0.0
     by_day = {d: [] for d in days}
     raw_by_day = {d: 0.0 for d in days}
+    sources_by_day = {d: set() for d in days}
     now_ts = now.timestamp()
     current_interval_found = False
     for row in forecast_rows:
@@ -120,6 +121,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None):
         start = end - seconds
         duration_hours = seconds / 3600
         calibrated_kw = max(0, row["kw"] * factor * interval_shape(start, seconds, shape or {}))
+        sources_by_day[date].add(row.get("forecast_source", "weather"))
         raw_by_day[date] += calibrated_kw * duration_hours
         if start <= now_ts < end:
             live_kw = calibrated_kw
@@ -137,14 +139,17 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None):
 
     else:
         sums[today_iso] = actual_today + remaining
-    daily = [{"date": d, "kwh": round(sums[d], 1)} for d in days]
+    daily = [{"date": d, "kwh": round(sums[d], 1),
+              "source": "ensemble" if "ensemble" in sources_by_day[d] else "weather"}
+             for d in days if sources_by_day[d]]
     power_profile_today = hourly_power_profile(by_day[today_iso])
     power_profile_tomorrow = hourly_power_profile(by_day[days[1]])
     return {
         "today": round(sums[today_iso], 1),
         "model_today": round(raw_by_day[today_iso], 1),
         "tomorrow": round(sums[days[1]], 1),
-        "next_7_days": round(sum(sums[d] for d in days[1:]), 1),
+        "next_7_days": round(sum(sums[d] for d in days[1:8]), 1),
+        "next_30_days": round(sum(sums[d] for d in days), 1),
         "remaining_today": round(remaining, 1),
         "current_kw": round(live_kw, 2),
         "daily": daily,
@@ -160,7 +165,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None):
 
 
 def merge_quarter_hourly(hourly, quarters):
-    """Replace only complete hours; retain hourly coverage for the 8-day horizon."""
+    """Replace only complete hours; retain hourly coverage for the full horizon."""
     by_end = {r["end"]: r for r in quarters}
     result = []
     for row in hourly:

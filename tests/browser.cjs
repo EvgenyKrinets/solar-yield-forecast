@@ -11,7 +11,7 @@ const assert=require('node:assert/strict');
    const now=Date.now(), rows=[];
    for(let t=now-54*3600000;t<now;t+=60000)rows.push({last_changed:new Date(t).toISOString(),state:'4000'});
    const points=Array.from({length:216},(_,i)=>({time:new Date(now-54*3600000+i*900000).toISOString(),power_w:4500+3000*Math.sin(i/12)}));
-   const hass={states:{'sensor.total_dc_power':{attributes:{unit_of_measurement:'W'}},'sensor.solar_yield_forecast_today':{attributes:{daily_forecast:Array.from({length:8},(_,i)=>({date:'2026-10-'+(22+i),kwh:100+i}))}},'sensor.solar_yield_forecast_power_profile_today':{attributes:{points:[{time:'invalid',power_w:null},...points]}}},callApi:async()=>[rows]};
+   const hass={states:{'sensor.total_dc_power':{attributes:{unit_of_measurement:'W'}},'sensor.solar_yield_forecast_today':{attributes:{daily_forecast:Array.from({length:30},(_,i)=>({date:new Date(Date.UTC(2026,9,22+i)).toISOString().slice(0,10),kwh:100+i,source:i>=16?'ensemble':'weather'}))}},'sensor.solar_yield_forecast_power_profile_today':{attributes:{points:[{time:'invalid',power_w:null},...points]}}},callApi:async()=>[rows]};
    window.fixture=hass;card.hass=hass;
  });
  for(const width of [360,850,1400]){
@@ -43,6 +43,10 @@ const assert=require('node:assert/strict');
  await page.evaluate(()=>document.querySelector('solar-comparison-card').setConfig({size:'compact'}));
  await page.waitForTimeout(100);
  assert.equal(await page.locator('svg').evaluate(e=>e.viewBox.baseVal.height),260);
+ await page.locator('[data-forecast-range="30"]').click();
+ assert.equal(await page.locator('.day').count(),30);
+ assert.equal(await page.locator('.day.ensemble').count(),14);
+ await page.locator('[data-forecast-range="8"]').click();
  await page.evaluate(()=>document.querySelector('solar-comparison-card').hass=window.fixture);
  await page.waitForFunction(()=>document.querySelector('solar-comparison-card').shadowRoot.querySelectorAll('.series-line').length===3);
  await page.evaluate(async()=>{

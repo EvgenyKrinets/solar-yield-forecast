@@ -1,3 +1,12 @@
+## 0.9.0 — 30-day robust adaptation and monthly forecast
+
+Intraday calibration now uses 30 days of Recorder history, normalises daily
+amplitude before learning shape, smooths hourly corrections and validates the
+peak separately. This prevents a few cloudy or incomplete hours from creating
+an artificial midday notch. The regular Open-Meteo forecast covers the first
+16 days; the lower-confidence GFS ensemble mean extends the daily bars to 30
+days. Use **8 days / Month** below the chart. Long-range bars are striped.
+
 ## 0.8.2 — Touch gesture continuity
 
 Keep the SVG and touch targets mounted during pinch updates. Use two-dimensional finger distance and rebase panning when one finger is lifted. Hide tooltips during gestures. Short missing history intervals are shown with explicitly labelled dashed guides; measured curves/fills and energy remain unchanged, and tooltips no longer borrow a neighbour's value inside a missing interval.
@@ -10,9 +19,9 @@ Preserve card/controls and scroll position during updates, including expanded vi
 
 ## 0.7.0 — intraday calibration / обучение формы
 
-The integration now learns the intraday profile from seven days of local DC
+The integration learns the intraday profile from local DC
 power history. Corrections are enabled only after improving a separate
-two-day retrospective validation by at least 10%; insufficient data leaves
+retrospective validation; insufficient data leaves
 the base forecast active. The hourly correction uses UTC to avoid DST shifts.
 It is combined with the existing daily calibration, and applied to interval
 energy as well as the power curve. Model Today exposes the modeled whole-day
@@ -63,14 +72,15 @@ accuracy has not been validated against a private recorder export yet.
 - Saved day-ahead baseline predictions, never rewritten as the day progresses.
 - Separate forward forecast error metric once eligible full-day observations arrive; historical fit error remains separate.
 - Samples of actual instant Sungrow power versus forecast *hourly mean*. These are contextual diagnostics, **not** valid direct point-by-point errors.
-- A two-panel dashboard: yesterday/today/forecast and 8 daily yield bars.
+- A two-panel dashboard: yesterday/today/forecast and switchable 8/30 daily yield bars.
 - Existing entity IDs and .storage persisted energy/calibration retained.
 
 **Important**: the built-in `daily_seed.json` is optional; do not publish private home energy histories. When upgrading from 0.2.0, leave this file in place on the local HA if you still need the old observations. Removing it may temporarily reduce calibration history. Do not delete your existing integration entry.
 
 ### Known limitations
 
-- No built-in weather-based 15-minute nowcast yet. Open-Meteo hourly irradiation and instantaneous inverter output naturally differ.
+- Open-Meteo 15-minute values in Israel are interpolated from hourly weather. Instantaneous inverter output naturally differs.
+- Days 17–30 use a coarse GFS ensemble mean and are scenario estimates, not precise local daily weather forecasts.
 - Forward accuracy requires future completed days and will initially be `unknown`.
 - Past daily values are recorded only if Home Assistant sensors update correctly. Continuous daylight clipping is not detected automatically.
 - Automated HACS installation requires a public GitHub repository; project files alone do not publish it.

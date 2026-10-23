@@ -15,3 +15,4 @@ PANEL_GROUPS = [
 TIMEZONE = "Asia/Jerusalem"
 API_FORECAST = "https://api.open-meteo.com/v1/forecast"
 API_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
+API_ENSEMBLE = "https://ensemble-api.open-meteo.com/v1/ensemble"
