@@ -59,3 +59,24 @@ test('today fill closes each observed section without filling gaps or future tim
  assert.ok(area.endsWith('L9.25,0.00 L9.00,0.00 Z'));
  assert.equal(ctx.solarSmoothPath([],id,id,true,0),'');
 });
+
+test('calendar navigation clamps month/year and handles leap years',()=>{
+ assert.equal(ctx.solarShift('2026-01-31',1,'month'),'2026-02-01');
+ assert.equal(ctx.solarShift('2024-02-29',1,'year'),'2025-01-01');
+ assert.equal(ctx.solarShift('2026-10-23',-7),'2026-10-16');
+});
+test('Israel calendar midnight respects the DST transition',()=>{
+ assert.equal(new Date(ctx.solarMidnight('2026-10-24')).toISOString(),'2026-10-23T21:00:00.000Z');
+ assert.equal(new Date(ctx.solarMidnight('2026-10-26')).toISOString(),'2026-10-25T22:00:00.000Z');
+ assert.equal(ctx.solarMidnight('2026-10-26')-ctx.solarMidnight('2026-10-25'),25*3600000);
+});
+
+test('late history response cannot replace a newer selected date',async()=>{
+ const Card=vm.runInContext('SolarComparisonCard',ctx),card=new Card();
+ card.config={pv_entity:'sensor.pv'};card._period='day';card._selected='2026-10-20';card._render=()=>{};
+ const pending=[];card._hass={states:{},callApi:()=>new Promise(resolve=>pending.push(resolve))};
+ const first=card._fetch();card._selected='2026-10-21';const second=card._fetch();
+ pending[1]([[{state:'2000'}]]);await second;
+ pending[0]([[{state:'1000'}]]);await first;
+ assert.equal(card._history[0].state,'2000');assert.equal(card._loading,false);
+});

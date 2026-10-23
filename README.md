@@ -83,3 +83,15 @@ Hover or touch the time plot for the previous-day, current-day, and forecast pow
 ## Smooth charts (0.7.1)
 
 Curves pass through the original 15-minute values without overshooting or bridging gaps. Smoothing only affects the drawing; tooltips and energy calculations retain the original data. Set `smooth: false` in the card YAML to use straight segments. Labels use the Home Assistant/system font; small cards show daily bars in two rows.
+
+## 0.8.0 — Interactive history chart
+
+- Day / Week / Month / Year / All-time tabs, calendar and previous/next period navigation.
+- Two-finger horizontal zoom, drag while zoomed, reset, Ctrl+wheel, expanded view.
+- Orange PV fill, blue previous-day curve, green forecast and series switches.
+- Historical daily curves load the selected day and preceding day from Recorder; unavailable history remains empty. Today/tomorrow profiles are shown only where available.
+- Energy views use the integration's saved daily totals. Missing days are not zero-filled; month/year totals can be partial. Click bars to drill down.
+- Israel calendar navigation respects DST. Fast navigation ignores stale history responses.
+
+Update through HACS after release, then restart Home Assistant. Recorder retention limits older power curves. Saved daily totals begin with the integration's available history; this update does not recover deleted Recorder data.
+

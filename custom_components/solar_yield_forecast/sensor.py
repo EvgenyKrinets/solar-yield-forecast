@@ -52,6 +52,7 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
         if self.key == "today":
             attrs.update({
                 "daily_forecast": values.get("daily", []),
+                "daily_actuals": dict(self.coordinator.actuals),
                 "hourly_forecast": values.get("hourly_today", []),
                 "actual_today_kwh": values.get("actual_today"),
                 "calibration_days": values.get("calibration_days"),
