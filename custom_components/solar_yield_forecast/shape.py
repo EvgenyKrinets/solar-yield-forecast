@@ -9,14 +9,8 @@ def shape_at(stamp, factors):
     hour = (stamp / 3600 - .5) % 24
     left = int(hour)
     fraction = hour - left
-    a = factors.get(str(left))
-    b = factors.get(str((left + 1) % 24))
-    if a is None and b is None:
-        return 1.0
-    if a is None:
-        a = b
-    if b is None:
-        b = a
+    a = factors.get(str(left), 1.0)
+    b = factors.get(str((left + 1) % 24), 1.0)
     return a + (b - a) * fraction
 
 
