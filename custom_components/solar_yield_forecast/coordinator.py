@@ -60,7 +60,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 pass
         self.daily_baselines = data.get("daily_baselines", {})
         self.daily_errors = data.get("daily_errors", {})
-        self.live_comparisons = data.get("live_comparisons", [])[-300:]
+        self.live_comparisons = data.get("live_comparisons", [])[-5000:]
         self._ingest_state(self.hass.states.get(self.entry.data.get("daily_sensor", DEFAULT_DAILY_SENSOR)))
 
     async def _one_group(self, base, group, extras):
@@ -187,7 +187,10 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "actuals": self.actuals,
             "daily_baselines": self.daily_baselines,
             "daily_errors": self.daily_errors,
-            "live_comparisons": self.live_comparisons[-300:],
+            # Keep a private rolling power archive even when Recorder has a
+            # short purge window. About 5,000 five-minute daylight samples
+            # cover more than a month without touching ESP32/inverter storage.
+            "live_comparisons": self.live_comparisons[-5000:],
         }, 180)
 
     def _update_scorecard(self, now, result):
@@ -278,6 +281,18 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 except (ValueError, TypeError):
                     value = None
                 states.append((state.last_updated.timestamp(), value))
+            # Older self-recorded samples extend a short Recorder retention.
+            # Recorder values win when timestamps happen to match exactly.
+            known = {round(stamp, 3) for stamp, _ in states}
+            cutoff = (now-timedelta(days=30)).timestamp()
+            for sample in self.live_comparisons:
+                try:
+                    stamp = datetime.fromisoformat(sample["time"]).timestamp()
+                    value = float(sample["actual_kw"])
+                    if cutoff <= stamp <= now.timestamp() and round(stamp, 3) not in known and math.isfinite(value) and value >= 0:
+                        states.append((stamp, value))
+                except (KeyError, TypeError, ValueError):
+                    continue
             hours = await self.hass.async_add_executor_job(power_hours, states, now.timestamp())
             self.shape_factors, self.shape_report = learn_shape(hours, self._hourly_weather, self.factor, today, TZ)
         except Exception:
@@ -336,7 +351,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 "actual_kw": round(power_kw,2),
                 "forecast_interval_mean_kw": round(predicted,2),
             })
-            self.live_comparisons = self.live_comparisons[-300:]
+            self.live_comparisons = self.live_comparisons[-5000:]
             self._persist()
         except (ValueError, TypeError, OverflowError):
             return

@@ -69,3 +69,11 @@ The regular forecast API supplies the first 16 days. Days 17–30 use the mean
 of the 31-member NCEP GEFS 0.5-degree ensemble. Those long-range values are
 marked `source: ensemble` and rendered as striped bars because their local
 day-to-day accuracy is inherently lower.
+
+## 0.9.1 short Recorder retention
+
+Seven to eighteen complete power-history days use a conservative fallback:
+two days are held out, total validation WAPE must improve by 10%, and peak
+WAPE must improve by 3%. The full learner remains preferred from 19 days.
+The integration privately retains up to 5,000 five-minute live comparisons so
+future learning can extend beyond Home Assistant Recorder's purge window.

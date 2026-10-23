@@ -1,3 +1,12 @@
+## 0.9.1 — Adaptive fallback for short Recorder history
+
+- Fix the practical reason a stable real production curve could still show the uncorrected broad physical forecast: 0.9.0 required 19 complete **power-history** days, while Home Assistant Recorder often retains fewer even when daily energy totals exist for months.
+- Keep the full 30-day learner when at least 19 complete days are available. With 7–18 complete days, use two held-out validation days and a stricter 10% overall plus 3% peak-region improvement gate. The same daily normalisation, five-hour smoothing and 3.5% adjacent-factor limit remain active, so the fallback cannot restore the old unstable one-hour notch behaviour.
+- Retain up to 5,000 private five-minute actual/forecast samples in the integration's Home Assistant storage. These gradually extend shape learning beyond Recorder's purge window; no measurements are uploaded or committed to GitHub.
+- Publish `history_mode`, `available_days` and `minimum_hour_support` in `shape_calibration` for diagnosis.
+
+Update through HACS and restart Home Assistant. The adaptive shape is recalculated on the first successful update after restart.
+
 ## 0.9.0 — Robust 30-day learning and monthly forecast
 
 - Learn the intraday correction from 30 days of Recorder history. Normalise each training day by its daily energy before learning shape, require at least 19 complete days, use five held-out validation days and at least ten observations per corrected UTC hour.

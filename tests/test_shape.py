@@ -35,8 +35,23 @@ def test_holdout_rejects_changed_pattern():
 
 def test_insufficient_and_partial_history():
     actual,weather=fixture(lambda d,h:.5)
-    assert learn_shape(actual,weather[:18*11],1,'2026-10-20',TZ)[0]=={}
+    assert learn_shape(actual,weather[:6*11],1,'2026-10-20',TZ)[0]=={}
     assert learn_shape({k:[v[0],1000] for k,v in actual.items()},weather,1,'2026-10-20',TZ)[0]=={}
+
+def test_short_recorder_history_uses_stricter_fallback():
+    actual,weather=fixture(lambda d,h:.82 if h>=15 else 1.08, days=9)
+    factors,report=learn_shape(actual,weather,1,'2026-10-20',TZ)
+    assert report['history_mode']=='short_history'
+    assert report['available_days']==9
+    assert report['validation_days']==2
+    assert report['minimum_hour_support']>=4
+    assert factors and factors['15'] < 1
+
+def test_short_history_rejects_pattern_missing_from_validation():
+    actual,weather=fixture(lambda d,h:(.8 if h>=15 else 1.08) if d<7 else 1, days=9)
+    factors,report=learn_shape(actual,weather,1,'2026-10-20',TZ)
+    assert factors=={}
+    assert report['status']=='no_validated_improvement'
 
 def test_daily_amplitude_is_not_learned_as_hourly_shape():
     actual,weather=fixture(lambda d,h:.65 if d%3==0 else 1.15)

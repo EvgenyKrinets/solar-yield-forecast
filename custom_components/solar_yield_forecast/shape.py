@@ -60,10 +60,27 @@ def learn_shape(hours, weather, factor, today, tz):
         if local.date().isoformat() < today and coverage >= 3550 and predicted >= .5:
             samples.append((local.date().isoformat(), datetime.fromtimestamp(start, timezone.utc).hour, actual, predicted))
     days = sorted({s[0] for s in samples})
-    validation_count = min(5, max(0, len(days) - 14))
-    report = {'status':'insufficient_history', 'training_days':max(0,len(days)-validation_count), 'validation_days':validation_count,
+    if len(days) >= 19:
+        validation_count, min_support = 5, 10
+        min_test, min_test_energy = 30, 60
+        improvement, peak_improvement = .95, 1.0
+        history_mode = 'full_30_day'
+    elif len(days) >= 7:
+        # Home Assistant commonly keeps only about ten Recorder days. Use a
+        # stricter acceptance gate instead of disabling adaptation entirely.
+        validation_count = 2
+        training_count = len(days) - validation_count
+        min_support = max(4, min(10, (training_count*3+4)//5))
+        min_test, min_test_energy = 12, 30
+        improvement, peak_improvement = .90, .97
+        history_mode = 'short_history'
+    else:
+        validation_count, history_mode = min(2, len(days)), 'insufficient'
+    report = {'status':'insufficient_history', 'history_mode':history_mode,
+              'available_days':len(days), 'training_days':max(0,len(days)-validation_count),
+              'validation_days':validation_count,
               'metric':'Retrospective hourly energy WAPE, not day-ahead accuracy'}
-    if len(days)<19 or validation_count < 5:
+    if len(days) < 7:
         return {}, report
     validation_days = set(days[-validation_count:])
     train = [s for s in samples if s[0] not in validation_days]
@@ -81,7 +98,7 @@ def learn_shape(hours, weather, factor, today, tz):
     for hour in range(24):
         ratios = [actual/(predicted*daily_scale[day]) for day, h, actual, predicted in train
                   if h == hour and day in daily_scale and predicted >= .5]
-        if len(ratios) >= 10:
+        if len(ratios) >= min_support:
             # Shape is deliberately conservative. Larger amplitude errors are
             # the job of the daily calibration, not the hourly correction.
             raw[hour] = max(.82, min(1.18, median(ratios)))
@@ -114,7 +131,7 @@ def learn_shape(hours, weather, factor, today, tz):
 
     test = [s for s in samples if s[0] in validation_days and str(s[1]) in factors]
     total = sum(s[2] for s in test)
-    if len(test)<30 or total<60:
+    if len(test) < min_test or total < min_test_energy:
         return {}, report
     before = sum(abs(s[2]-s[3]) for s in test)/total
     after = sum(abs(s[2]-s[3]*interval_shape(s[1]*3600,3600,factors)) for s in test)/total
@@ -123,9 +140,10 @@ def learn_shape(hours, weather, factor, today, tz):
     peak_total = sum(s[2] for s in peak)
     peak_before = sum(abs(s[2]-s[3]) for s in peak)/peak_total if peak_total else 0
     peak_after = sum(abs(s[2]-s[3]*interval_shape(s[1]*3600,3600,factors)) for s in peak)/peak_total if peak_total else 0
-    accepted = after < before*.95 and peak_after <= peak_before
+    accepted = after < before*improvement and peak_after <= peak_before*peak_improvement
     report.update(status='active' if accepted else 'no_validated_improvement',
                   before_wape_percent=round(before*100,2), after_wape_percent=round(after*100,2),
                   peak_before_wape_percent=round(peak_before*100,2), peak_after_wape_percent=round(peak_after*100,2),
+                  minimum_hour_support=min_support,
                   factor_support_utc={str(hour): count for hour, count in support.items()})
     return (factors if accepted else {}), report
