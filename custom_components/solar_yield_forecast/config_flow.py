@@ -160,21 +160,23 @@ class SolarYieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return SolarYieldOptionsFlow(config_entry)
+        # Home Assistant attaches the config entry after constructing the flow.
+        # Passing it into __init__ prevents the options flow from starting on
+        # current HA releases and surfaces as a generic HTTP 400 in the UI.
+        return SolarYieldOptionsFlow()
 
 
 class SolarYieldOptionsFlow(config_entries.OptionsFlow):
     """Edit the site and rebuild its panel groups from the UI."""
 
-    def __init__(self, config_entry):
-        self._entry = config_entry
+    def __init__(self):
         self._site = {}
         self._existing = []
         self._groups = []
         self._index = 0
 
     async def async_step_init(self, user_input=None):
-        current = {**self._entry.data, **self._entry.options}
+        current = {**self.config_entry.data, **self.config_entry.options}
         if user_input is not None:
             try:
                 ZoneInfo(user_input[CONF_TIME_ZONE])
