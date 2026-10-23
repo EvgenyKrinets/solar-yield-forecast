@@ -8,6 +8,7 @@ import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from aiohttp import ClientError, ClientTimeout
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -15,14 +16,24 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.core import callback
-from .const import (DOMAIN, PANEL_GROUPS, API_ARCHIVE, API_ENSEMBLE, API_FORECAST, DEFAULT_DAILY_SENSOR, TIMEZONE)
-from .model import (TZ, combine_weather, calibration, forecast_summary, open_meteo_azimuth, merge_quarter_hourly)
+from .const import (CONF_PANEL_GROUPS, CONF_TIME_ZONE, DOMAIN, PANEL_GROUPS, API_ARCHIVE, API_ENSEMBLE, API_FORECAST, DEFAULT_DAILY_SENSOR, DEFAULT_DC_SENSOR, TIMEZONE)
+from .model import (combine_weather, calibration, forecast_summary, open_meteo_azimuth, merge_quarter_hourly)
 _LOGGER = logging.getLogger(__name__)
 
 class SolarYieldCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
         super().__init__(hass, _LOGGER, name="Solar Yield Forecast", update_interval=timedelta(minutes=15))
         self.entry = entry
+        self.config = {**entry.data, **entry.options}
+        self.groups = self.config.get(CONF_PANEL_GROUPS) or PANEL_GROUPS
+        time_zone = self.config.get(CONF_TIME_ZONE) or getattr(hass.config, "time_zone", TIMEZONE)
+        try:
+            self.tz = ZoneInfo(time_zone)
+            self.time_zone = time_zone
+        except ZoneInfoNotFoundError:
+            _LOGGER.warning("Unknown timezone %s; using %s", time_zone, TIMEZONE)
+            self.tz = ZoneInfo(TIMEZONE)
+            self.time_zone = TIMEZONE
         self.session = async_get_clientsession(hass)
         self.store = Store(hass, 1, f"{DOMAIN}_{entry.entry_id}")
         self.actuals: dict[str, float] = {}
@@ -61,16 +72,16 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.daily_baselines = data.get("daily_baselines", {})
         self.daily_errors = data.get("daily_errors", {})
         self.live_comparisons = data.get("live_comparisons", [])[-5000:]
-        self._ingest_state(self.hass.states.get(self.entry.data.get("daily_sensor", DEFAULT_DAILY_SENSOR)))
+        self._ingest_state(self.hass.states.get(self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR)))
 
     async def _one_group(self, base, group, extras):
         params = {
-            "latitude": self.entry.data[CONF_LATITUDE],
-            "longitude": self.entry.data[CONF_LONGITUDE],
+            "latitude": self.config[CONF_LATITUDE],
+            "longitude": self.config[CONF_LONGITUDE],
             "hourly": "global_tilted_irradiance,temperature_2m,wind_speed_10m",
             "tilt": group["tilt"],
             "azimuth": open_meteo_azimuth(group["azimuth"]),
-            "timezone": TIMEZONE,
+            "timezone": self.time_zone,
             "timeformat": "unixtime",
             **extras,
         }
@@ -86,13 +97,13 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         async def get(group):
             async with semaphore:
                 return await self._one_group(base, group, extras)
-        responses = await asyncio.gather(*(get(g) for g in PANEL_GROUPS))
-        hourly = combine_weather(responses)
+        responses = await asyncio.gather(*(get(g) for g in self.groups))
+        hourly = combine_weather(responses, self.groups)
         if base == API_FORECAST:
             self._hourly_weather = hourly
         if base == API_FORECAST:
             try:
-                quarters = combine_weather(responses, section="minutely_15", interval_seconds=900)
+                quarters = combine_weather(responses, self.groups, section="minutely_15", interval_seconds=900)
                 return merge_quarter_hourly(hourly, quarters)
             except ValueError:
                 _LOGGER.warning("Incomplete 15-minute forecast; using hourly means")
@@ -140,8 +151,8 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                         "models": "ncep_gefs05", "forecast_days": 31,
                     })
                     return self._ensemble_mean(response)
-            responses = await asyncio.gather(*(get(group) for group in PANEL_GROUPS))
-            self.ensemble_rows = combine_weather(responses)
+            responses = await asyncio.gather(*(get(group) for group in self.groups))
+            self.ensemble_rows = combine_weather(responses, self.groups)
             for row in self.ensemble_rows:
                 row["forecast_source"] = "ensemble"
         except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
@@ -162,7 +173,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.archive_last_attempt = now
         if not self.actuals:
             return
-        today = now.astimezone(TZ).date()
+        today = now.astimezone(self.tz).date()
         archive_end = today - timedelta(days=5)
         archive_start = max(today - timedelta(days=45), datetime.fromisoformat(min(self.actuals)).date())
         if archive_start > archive_end:
@@ -173,13 +184,13 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 "end_date": archive_end.isoformat(),
             })
             self.factor, self.cal_days, self.training_error = calibration(
-                self.actuals, self.archive_rows, today.isoformat()
+                self.actuals, self.archive_rows, today.isoformat(), self.tz
             )
         except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
             _LOGGER.warning("Historical Open-Meteo unavailable; keeping calibration: %s", exc)
 
     def _actual_today(self, now):
-        today = now.astimezone(TZ).date().isoformat()
+        today = now.astimezone(self.tz).date().isoformat()
         return float(self.actuals[today]) if today in self.actuals else None
 
     def _persist(self):
@@ -194,7 +205,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         }, 180)
 
     def _update_scorecard(self, now, result):
-        local = now.astimezone(TZ)
+        local = now.astimezone(self.tz)
         today = local.date().isoformat()
         for row in result.get("daily", []):
             day = row["date"]
@@ -229,7 +240,10 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
 
     def _build_data(self):
         now = datetime.now(timezone.utc)
-        result = forecast_summary(self._combined_forecast_rows(), self.factor, self._actual_today(now), now, self.shape_factors)
+        result = forecast_summary(
+            self._combined_forecast_rows(), self.factor, self._actual_today(now), now,
+            self.shape_factors, tz=self.tz,
+        )
         result.update({
             "factor_percent": round(self.factor * 100, 1),
             "calibration_days": self.cal_days,
@@ -238,6 +252,14 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "actual_today": self._actual_today(now),
             "shape_calibration": self.shape_report,
             "shape_factors_utc": self.shape_factors,
+            "site": {
+                "name": self.config.get("site_name", self.entry.title),
+                "latitude": self.config.get(CONF_LATITUDE),
+                "longitude": self.config.get(CONF_LONGITUDE),
+                "time_zone": self.time_zone,
+                "panel_groups": self.groups,
+                "capacity_kwp": round(sum(float(group.get("kwp", 0)) for group in self.groups), 3),
+            },
         })
         self._update_scorecard(now, result)
         return result
@@ -257,7 +279,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Open-Meteo forecast failed: {exc}") from exc
 
     async def _learn_shape(self, now):
-        today = now.astimezone(TZ).date().isoformat()
+        today = now.astimezone(self.tz).date().isoformat()
         if self._shape_day == today:
             return
         self._shape_day = today
@@ -267,7 +289,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         try:
             from homeassistant.components.recorder import get_instance
             from homeassistant.components.recorder.history import get_significant_states
-            entity = self.entry.data.get("dc_power_sensor", "sensor.total_dc_power")
+            entity = self.config.get("dc_power_sensor", DEFAULT_DC_SENSOR)
             history = await get_instance(self.hass).async_add_executor_job(partial(
                 get_significant_states, self.hass, now-timedelta(days=30), now,
                 entity_ids=[entity], significant_changes_only=False,
@@ -294,7 +316,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 except (KeyError, TypeError, ValueError):
                     continue
             hours = await self.hass.async_add_executor_job(power_hours, states, now.timestamp())
-            self.shape_factors, self.shape_report = learn_shape(hours, self._hourly_weather, self.factor, today, TZ)
+            self.shape_factors, self.shape_report = learn_shape(hours, self._hourly_weather, self.factor, today, self.tz)
         except Exception:
             # Optional calibration must never make the main forecast unavailable.
             _LOGGER.exception("Could not learn intraday power profile")
@@ -310,7 +332,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 return False
         except (TypeError, ValueError):
             return False
-        stamp = state.last_updated.astimezone(TZ)
+        stamp = state.last_updated.astimezone(self.tz)
         day = stamp.date()
         if stamp.hour < 4 and value > 3:
             day -= timedelta(days=1)
@@ -360,11 +382,11 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
     def async_start_tracking(self):
         if self._unsub_energy is None:
             self._unsub_energy = async_track_state_change_event(
-                self.hass, [self.entry.data.get("daily_sensor", DEFAULT_DAILY_SENSOR)], self._energy_changed
+                self.hass, [self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR)], self._energy_changed
             )
         if self._unsub_power is None:
             self._unsub_power = async_track_state_change_event(
-                self.hass, [self.entry.data.get("dc_power_sensor", "sensor.total_dc_power")], self._power_changed
+                self.hass, [self.config.get("dc_power_sensor", DEFAULT_DC_SENSOR)], self._power_changed
             )
 
     @callback

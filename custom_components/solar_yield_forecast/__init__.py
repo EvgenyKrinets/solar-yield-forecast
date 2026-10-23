@@ -11,7 +11,12 @@ from .coordinator import SolarYieldCoordinator
 
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/api/{DOMAIN}/solar-comparison-card.js"
-FRONTEND_VERSION = "0.8.2"
+FRONTEND_VERSION = "1.0.0"
+
+
+async def _async_reload_entry(hass, entry):
+    """Apply UI option changes immediately by rebuilding the coordinator."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_setup(hass, config):
@@ -32,6 +37,7 @@ async def async_setup_entry(hass, entry):
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     coordinator.async_start_tracking()
     entry.async_on_unload(coordinator.async_stop_tracking)
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 
 

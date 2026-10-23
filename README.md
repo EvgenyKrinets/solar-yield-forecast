@@ -1,3 +1,14 @@
+## 1.0.0 — Configure any PV installation from the UI
+
+Solar Yield Forecast is no longer tied to one Dimona array. The installation
+wizard uses the Home Assistant location as its default and lets the user set a
+site/city name, coordinates, IANA time zone and production sensors. Add up to
+12 panel groups, each with its own panel count, panel wattage, tilt and azimuth.
+All settings can later be changed with **Settings → Devices & services → Solar
+Yield Forecast → Configure**; the entry reloads automatically and keeps its
+stored production history. Existing installations retain their original five
+groups until the owner chooses to edit them.
+
 ## 0.9.1 — Short-history adaptive fallback
 
 The protected shape learner now also works with 7–18 complete Recorder days,
@@ -52,14 +63,14 @@ energy separately from Today (actual plus remaining).
 В 0.6.0 фактическая мощность учитывает длительность показаний, пропуски не соединяются линией. Показываются завершённые 15-минутные интервалы. Новые данные прогноза используют длительность интервала при расчёте энергии. Погодная точность для Израиля ограничена интерполяцией Open-Meteo. Раздел о 0.5.0 ниже описывает предыдущую версию.
 
 
-Custom integration for 48 × 670 W PV panels (five orientations) using Open-Meteo irradiance.
+Custom Home Assistant integration for configurable multi-orientation PV systems using Open-Meteo irradiance.
 
 ## Installation from HACS (custom repository)
 
 1. Add `https://github.com/EvgenyKrinets/solar-yield-forecast` as a **Custom repository → Integration**.
 2. Download Solar Yield Forecast, restart Home Assistant.
 3. Settings → Devices & services → Add integration → Solar Yield Forecast.
-4. Supply approximate latitude/longitude, `sensor.daily_pv_generation` and `sensor.total_dc_power`.
+4. Select the site, time zone and production sensors, then add each panel orientation. Azimuth is clockwise from north: 0° north, 90° east, 180° south and 270° west.
 
 ### Dashboard
 

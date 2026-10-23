@@ -15,5 +15,10 @@ def test_groups_and_azimuths():
 def test_dc_power():
     assert 0 < estimate_kw(800,27,5,PANEL_GROUPS[0]) < 14.07
 
+def test_custom_group_uses_its_own_capacity():
+    small={"id":"roof","count":10,"panel_power_w":400,"kwp":4.0,"tilt":25,"azimuth":180}
+    large={**small,"kwp":8.0}
+    assert estimate_kw(800,27,5,large) == 2 * estimate_kw(800,27,5,small)
+
 def test_empty_history():
     assert calibration({},[],"2026-10-22")== (1.0,0,None)

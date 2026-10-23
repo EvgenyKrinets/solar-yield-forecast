@@ -2,18 +2,68 @@
   "config": {
     "step": {
       "user": {
-        "title": "Solar Yield Forecast",
-        "description": "Forecast for 48 × 670 W panels in five groups (32.16 kWp). Coordinates default to Dimona city centre.",
+        "title": "Solar site",
+        "description": "Enter the site location and select Home Assistant production sensors. Coordinates and time zone default to the Home Assistant location.",
         "data": {
+          "site_name": "Site or city name",
           "latitude": "Latitude",
           "longitude": "Longitude",
+          "time_zone": "IANA time zone (for example Europe/Berlin)",
           "daily_sensor": "Daily PV yield sensor (kWh, resets each day)",
-          "dc_power_sensor": "PV DC power sensor (W)"
+          "dc_power_sensor": "Current PV power sensor (W or kW)"
+        }
+      },
+      "group": {
+        "title": "Panel group {number}",
+        "description": "Panels in one group must have the same tilt and azimuth. Azimuth is measured clockwise from north: 0° north, 90° east, 180° south, 270° west.",
+        "data": {
+          "group_name": "Group name",
+          "panel_count": "Number of panels",
+          "panel_power_w": "Rated power of one panel",
+          "tilt": "Tilt from horizontal",
+          "azimuth": "Azimuth clockwise from north",
+          "add_another": "Add another panel group"
         }
       }
     },
     "abort": {
-      "already_configured": "This forecast is already configured."
+      "already_configured": "This forecast is already configured. Use Configure to change the site or panel groups."
+    },
+    "error": {
+      "invalid_time_zone": "Enter a valid IANA time zone, for example Europe/Berlin."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Site and sensors",
+        "description": "Changes are applied automatically after the panel-group steps are saved.",
+        "data": {
+          "site_name": "Site or city name",
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "time_zone": "IANA time zone",
+          "daily_sensor": "Daily PV yield sensor",
+          "dc_power_sensor": "Current PV power sensor"
+        }
+      },
+      "group": {
+        "title": "Panel group {number}",
+        "description": "Review this group. Disable it to remove it. Azimuth: 0° north, 90° east, 180° south, 270° west.",
+        "data": {
+          "group_name": "Group name",
+          "panel_count": "Number of panels",
+          "panel_power_w": "Rated power of one panel",
+          "tilt": "Tilt from horizontal",
+          "azimuth": "Azimuth clockwise from north",
+          "include_group": "Keep this group",
+          "add_another": "Add another group after the existing groups"
+        }
+      }
+    },
+    "error": {
+      "at_least_one_group": "At least one enabled panel group is required.",
+      "invalid_time_zone": "Enter a valid IANA time zone, for example Europe/Berlin."
     }
   }
 }
