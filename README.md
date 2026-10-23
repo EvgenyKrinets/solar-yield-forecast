@@ -1,3 +1,10 @@
+## 1.0.2 — Configure-button compatibility fix
+
+The options wizard now uses Home Assistant's current options-flow lifecycle.
+This fixes the generic `400: Bad Request` shown when opening **Configure** on
+an existing installation. Saved panel groups, learned data and Recorder history
+are preserved.
+
 ## 1.0.1 — Installed-capacity summary
 
 The panel wizard now ends with a review page. It shows every group as panel
