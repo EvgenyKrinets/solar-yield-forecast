@@ -80,3 +80,10 @@ test('late history response cannot replace a newer selected date',async()=>{
  pending[0]([[{state:'1000'}]]);await first;
  assert.equal(card._history[0].state,'2000');assert.equal(card._loading,false);
 });
+
+
+test('fractional zoom ticks are short HH:mm labels',()=>{
+ for(const hour of [8.389241211,12.99999,23.999999,0,24])assert.match(ctx.solarTimeLabel(hour),/^\d{2}:\d{2}$/);
+ assert.equal(ctx.solarTimeLabel(8.5),'08:30');
+ assert.equal(ctx.solarTimeLabel(23.999999),'24:00');
+});

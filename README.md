@@ -1,3 +1,7 @@
+## 0.8.1 — Mobile chart fixes
+
+Preserve card/controls and scroll position during updates, including expanded view. Format fractional zoom ticks as HH:mm. Interpolate learned hourly shape corrections continuously and integrate them consistently for power/energy; held-out validation now evaluates that same correction. Weather-driven changes remain visible.
+
 # Solar Yield Forecast — Home Assistant
 
 ## 0.7.0 — intraday calibration / обучение формы

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from statistics import median
 from zoneinfo import ZoneInfo
 import math
+from .shape import interval_shape
 from .const import PANEL_KWP, PANEL_GROUPS, TIMEZONE
 TZ = ZoneInfo(TIMEZONE)
 
@@ -118,7 +119,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None):
         seconds = row.get("interval_seconds", 3600)
         start = end - seconds
         duration_hours = seconds / 3600
-        calibrated_kw = max(0, row["kw"] * factor * (shape or {}).get(str(datetime.fromtimestamp(start, timezone.utc).hour), 1.0))
+        calibrated_kw = max(0, row["kw"] * factor * interval_shape(start, seconds, shape or {}))
         raw_by_day[date] += calibrated_kw * duration_hours
         if start <= now_ts < end:
             live_kw = calibrated_kw
