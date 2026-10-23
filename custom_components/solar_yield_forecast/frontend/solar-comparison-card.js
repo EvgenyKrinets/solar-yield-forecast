@@ -197,6 +197,10 @@ class SolarComparisonCard extends HTMLElement {
     if(this._visible[1] && actual[1].length)svg+='<path class="today-area" d="'+solarSmoothPath(actual[1],xx,yy,this.config.smooth!==false,0)+'" fill="'+colors[1]+'" fill-opacity="0.22" stroke="none"/>';
     series.forEach((line,i)=>{
       if(!line.length)return;
+      if(i<2)for(let j=1;j<line.length;j++){
+        const a=line[j-1],b=line[j],gap=b[0]-a[0];
+        if(gap>.26&&gap<=1)svg+='<path class="history-gap" d="M'+xx(a[0])+','+yy(a[1])+' L'+xx(b[0])+','+yy(b[1])+'" fill="none" stroke="'+colors[i]+'" stroke-width="2" stroke-dasharray="4 5" opacity=".65"><title>Пропуск измерений — соединение для ориентира</title></path>';
+      }
       const d=solarSmoothPath(line,xx,yy,this.config.smooth!==false);
       svg+='<path class="series-line" data-series="'+['yesterday','today','forecast'][i]+'" d="'+d+'" fill="none" stroke="'+colors[i]+'" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>';
     });
@@ -260,7 +264,7 @@ class SolarComparisonCard extends HTMLElement {
       ${this._loading?'<div class="small">Загрузка истории…</div>':''}
       <h3 class="more">Прогноз выработки на 8 дней <span class="unit">· кВт·ч</span></h3>
       <div class="bars">${days.map(d=>`<div class="day"><b>${esc(d.kwh)} </b><div class="bar" style="height:${Math.max(2,100*(Number(d.kwh)||0)/max)}px"></div><span>${esc((d.date||'').slice(5))}</span></div>`).join('')}</div>
-      <p class="small">Разведите два пальца для увеличения графика дня; после увеличения перемещайте его пальцем. Двойное нажатие сбрасывает масштаб. Мощность усреднена за 15 минут. ${this.config.smooth!==false?'Линии сглажены; значения в подсказках и энергия рассчитаны по исходным точкам. ':''}Пропуски измерений не заполняются. В Израиле погодные данные интерполируются из часовых.</p>
+      <p class="small">Разведите два пальца для увеличения графика дня; после увеличения перемещайте его пальцем. Двойное нажатие сбрасывает масштаб. Мощность усреднена за 15 минут. ${this.config.smooth!==false?'Линии сглажены; значения в подсказках и энергия рассчитаны по исходным точкам. ':''}Пунктир обозначает короткий пропуск измерений, а не измеренную мощность; энергия за пропуск не вычисляется. В Израиле погодные данные интерполируются из часовых.</p>
       ${this._error?'<p class="small">История: '+esc(this._error)+'</p>':''}
       </ha-card>`;
     solarPatch(this._root,template.content);
@@ -271,6 +275,7 @@ class SolarComparisonCard extends HTMLElement {
     if(svg && tip && this._period==='day'){
       this._bindZoom(wrapper);
       const move=ev=>{
+        if(this._touching)return;
         const rect=svg.getBoundingClientRect();
         const g=this._plotGeometry||{W:850,l:55,r:16};
         const px=Math.max(g.l,Math.min(g.W-g.r,(ev.clientX-rect.left)*g.W/rect.width));
@@ -278,7 +283,7 @@ class SolarComparisonCard extends HTMLElement {
         const near=(line)=>{
           if(!line?.length)return null;
           let p=line.reduce((a,b)=>Math.abs(a[0]-hour)<Math.abs(b[0]-hour)?a:b);
-          return Math.abs(p[0]-hour)<=0.24?p[1]:null;
+          return Math.abs(p[0]-hour)<=0.126?p[1]:null;
         };
         const values=(this._series||[]).map(near);
         if(values.every(v=>v===null)){tip.style.display='none';if(guide)guide.setAttribute('opacity','0');return;}
@@ -358,7 +363,10 @@ class SolarComparisonCard extends HTMLElement {
       span=Math.max(1,Math.min(24,span));lo=Math.max(0,Math.min(24-span,lo));this._view=[lo,lo+span];
       wrapper.classList.toggle('zoomed',span<24);
       // Keep the touch target and its listeners mounted for the entire gesture.
-      const old=wrapper.querySelector('svg');old.outerHTML=this._svg();
+      const old=wrapper.querySelector('svg');
+      const doc=new DOMParser().parseFromString(this._svg(),'image/svg+xml');
+      // Patch descendants in place; Safari keeps delivering to the original target.
+      solarPatch(old,doc.documentElement);
       wrapper.querySelector('.chart-tooltip').style.display='none';
     };
     let gesture;
@@ -367,7 +375,7 @@ class SolarComparisonCard extends HTMLElement {
       const touches=[...e.touches];
       gesture={view:[...this._view],x:touches[0].clientX};
       if(touches.length===2){
-        gesture.distance=Math.max(1,Math.abs(touches[1].clientX-touches[0].clientX));
+        gesture.distance=Math.max(1,Math.hypot(touches[1].clientX-touches[0].clientX,touches[1].clientY-touches[0].clientY));
         gesture.center=fraction((touches[0].clientX+touches[1].clientX)/2);e.preventDefault();
       }
     },{passive:false});
@@ -376,11 +384,14 @@ class SolarComparisonCard extends HTMLElement {
       const span=gesture.view[1]-gesture.view[0];
       if(e.touches.length===2&&gesture.distance){
         e.preventDefault();
-        const next=Math.max(1,Math.min(24,span*gesture.distance/Math.max(1,Math.abs(e.touches[1].clientX-e.touches[0].clientX))));
+        const next=Math.max(1,Math.min(24,span*gesture.distance/Math.max(1,Math.hypot(e.touches[1].clientX-e.touches[0].clientX,e.touches[1].clientY-e.touches[0].clientY))));
         redraw(gesture.view[0]+gesture.center*span-fraction((e.touches[0].clientX+e.touches[1].clientX)/2)*next,next);
       }else if(e.touches.length===1&&span<24){e.preventDefault();redraw(gesture.view[0]+(fraction(gesture.x)-fraction(e.touches[0].clientX))*span,span);}
     },{passive:false});
-    const finish=e=>{if(!e.touches.length){gesture=null;this._touching=false;this._render();}};
+    const finish=e=>{
+      if(!e.touches.length){gesture=null;this._touching=false;this._render();}
+      else if(e.touches.length===1){gesture={view:[...this._view],x:e.touches[0].clientX};}
+    };
     wrapper.addEventListener('touchend',finish);wrapper.addEventListener('touchcancel',()=>{gesture=null;this._touching=false;this._render();});
     wrapper.ondblclick=()=>{this._view=[0,24];this._render();};
     wrapper.addEventListener('wheel',e=>{
