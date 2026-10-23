@@ -1,3 +1,9 @@
+## 1.0.1 — Installed-capacity summary
+
+The panel wizard now ends with a review page. It shows every group as panel
+count × panel wattage = group kWp, followed by the total panel count and total
+installed system capacity. Nothing is saved until that summary is confirmed.
+
 ## 1.0.0 — Configure any PV installation from the UI
 
 Solar Yield Forecast is no longer tied to one Dimona array. The installation
