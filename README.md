@@ -1,3 +1,11 @@
+## 0.9.1 — Short-history adaptive fallback
+
+The protected shape learner now also works with 7–18 complete Recorder days,
+using stricter validation than the full 30-day mode. Up to 5,000 five-minute
+power samples are retained privately in Home Assistant storage so learning can
+gradually outlive Recorder's purge window. Diagnostics expose the selected
+history mode and number of available days.
+
 ## 0.9.0 — 30-day robust adaptation and monthly forecast
 
 Intraday calibration now uses 30 days of Recorder history, normalises daily
