@@ -1,7 +1,7 @@
 from test_model import *
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from solar_yield_forecast.model import TZ, day_of_hour, forecast_summary, merge_quarter_hourly, hourly_power_profile, combine_weather
+from solar_yield_forecast.model import TZ, day_of_hour, forecast_summary, merge_quarter_hourly, hourly_power_profile, combine_weather, recent_live_scale
 
 def test_quarter_energy_and_remaining():
     start = datetime(2026, 10, 22, 12, tzinfo=TZ)
@@ -31,11 +31,12 @@ def test_thirty_day_summary_keeps_eight_day_total_separate():
     assert result['daily'][16]['source']=='ensemble'
 
 def test_fallback_no_double_counting():
-    hourly = [{'end':3600,'kw':4},{'end':7200,'kw':4}]
+    hourly = [{'end':3600,'kw':4,'cloud_cover':18},{'end':7200,'kw':4}]
     quarters = [{'end':900*i,'kw':4,'interval_seconds':900} for i in range(1,8)]
     rows = merge_quarter_hourly(hourly,quarters)
     assert len(rows) == 5
     assert sum(r['kw']*r.get('interval_seconds',3600)/3600 for r in rows)==8
+    assert all(row['cloud_cover']==18 for row in rows[:4])
 
 def test_midnight_belongs_to_preceding_day():
     midnight = datetime(2026,10,23,tzinfo=TZ)
@@ -57,3 +58,35 @@ def test_null_weather_is_not_zero_sunshine():
     group={'id':'a','count':1}
     response={'minutely_15':{'time':[900], 'global_tilted_irradiance':[None]}}
     assert combine_weather([response],[group], 'minutely_15',900)==[]
+
+
+def test_weather_metadata_survives_group_combination():
+    group={'id':'a','count':1,'kwp':1}
+    response={'hourly':{'time':[3600], 'global_tilted_irradiance':[500],
+                        'cloud_cover':[12], 'direct_radiation':[420],
+                        'diffuse_radiation':[80], 'shortwave_radiation':[500]}}
+    row=combine_weather([response],[group])[0]
+    assert row['cloud_cover']==12
+    assert row['direct_radiation']==420
+    assert row['diffuse_radiation']==80
+
+
+def test_recent_live_scale_is_bounded_and_requires_four_samples():
+    now=datetime(2026,10,24,9,tzinfo=TZ)
+    samples=[{'time':(now-timedelta(minutes=10*i)).isoformat(),
+              'actual_kw':12, 'forecast_interval_mean_kw':10} for i in range(5)]
+    assert recent_live_scale(samples[:3],now,TZ)==(1.0,3)
+    scale,count=recent_live_scale(samples,now,TZ)
+    assert count==5
+    assert scale==1.08
+
+
+def test_today_live_scale_does_not_change_tomorrow():
+    now=datetime(2026,10,24,8,tzinfo=TZ)
+    rows=[{'end':(now+timedelta(hours=1)).timestamp(),'kw':10,'cloud_cover':10},
+          {'end':(now+timedelta(days=1,hours=1)).timestamp(),'kw':10,'cloud_cover':80}]
+    result=forecast_summary(rows,1,None,now,today_scale=1.08)
+    assert result['today']==10.8
+    assert result['tomorrow']==10
+    assert result['daily'][0]['weather_mode']=='clear'
+    assert result['daily'][1]['weather_mode']=='cloudy'
