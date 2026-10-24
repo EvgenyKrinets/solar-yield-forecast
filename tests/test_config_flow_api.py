@@ -80,3 +80,6 @@ def test_country_city_search_uses_native_selector_and_keeps_manual_fallback() ->
     assert "async_step_location" in source
     assert "async_step_manual" in source
     assert "normalized_locations(payload)" in source
+    assert "_location_selection_schema" in source
+    assert 'step_id="user"' in source
+    assert 'step_id="init"' in source

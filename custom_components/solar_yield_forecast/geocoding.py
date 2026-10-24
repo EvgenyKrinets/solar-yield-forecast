@@ -49,6 +49,7 @@ def location_label(location):
     )
     suffix = f" — {area}" if area else ""
     return (
-        f"{location['name']}{suffix} "
-        f"({location['latitude']:.5f}, {location['longitude']:.5f})"
+        f"{location['name']}{suffix} · "
+        f"{location['latitude']:.5f}, {location['longitude']:.5f} · "
+        f"{location['time_zone']}"
     )

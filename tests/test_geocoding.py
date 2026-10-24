@@ -35,6 +35,7 @@ def test_complete_location_is_normalized_and_labelled() -> None:
     assert "Dimona" in label
     assert "Southern District, Israel" in label
     assert "31.07079, 35.03269" in label
+    assert "Asia/Jerusalem" in label
 
 
 def test_incomplete_or_out_of_range_results_are_rejected() -> None:

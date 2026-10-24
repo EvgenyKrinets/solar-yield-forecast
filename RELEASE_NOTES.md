@@ -1,3 +1,15 @@
+## 1.4.0 — One-page city selection and coordinate confirmation
+
+- Keep country, city search, exact-city selection and production sensors on
+  the same native Home Assistant setup page.
+- After the place search, replace ambiguity with a city dropdown on that same
+  page instead of opening a separate location step.
+- Show region, country, latitude, longitude and IANA time zone directly in
+  every dropdown option, so changing the selected city also changes the
+  visible coordinate pair before it is saved.
+- Apply the same workflow to both initial setup and Configure, while retaining
+  the explicit manual-coordinate fallback.
+
 ## 1.3.2 — Validated profile activation and scoped live correction
 
 - Accept a short-history installation profile when two held-out days show at
