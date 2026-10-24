@@ -90,3 +90,31 @@ def test_shape_is_continuous_at_missing_hour_boundaries():
     for hour in [9.5,10.5,11.5,23.5,24.5]:
         t=hour*3600
         assert abs(shape_at(t-.001,{'10':.5})-shape_at(t+.001,{'10':.5}))<1e-6
+
+
+def test_clear_days_build_real_profile_while_cloudy_days_are_excluded():
+    actual,weather=fixture(lambda d,h:(1.16 if h<14 else .72) if d<8 else (.55 if h in (11,12) else 1.0), days=11)
+    for row in weather:
+        day=(datetime.fromtimestamp(row['end']-3600, timezone.utc).date()-datetime(2026,9,20,tzinfo=timezone.utc).date()).days
+        clear=day<8
+        row.update(cloud_cover=8 if clear else 82,
+                   direct_radiation=700 if clear else 120,
+                   diffuse_radiation=100 if clear else 380,
+                   shortwave_radiation=800 if clear else 500)
+    factors,report=learn_shape(actual,weather,1,'2026-10-20',TZ)
+    assert report['history_mode']=='clear_weather_profile'
+    assert report['clear_weather_days']==8
+    assert report['selected_profile_days']==8
+    assert report['weather_always_applied'] is True
+    assert factors['10'] > 1
+    assert factors['15'] < 1
+
+
+def test_cloudy_forecast_is_still_multiplied_by_learned_profile():
+    now=datetime(2026,10,24,8,tzinfo=TZ)
+    rows=[{'end':(now+timedelta(hours=1)).timestamp(),'kw':10},
+          {'end':(now+timedelta(hours=2)).timestamp(),'kw':5}]
+    shaped=forecast_summary(rows,1,None,now,{str(hour):1.2 for hour in range(24)})
+    powers=[point['power_w'] for point in shaped['power_profile_today']]
+    assert max(powers)==12000
+    assert min(powers)==6000

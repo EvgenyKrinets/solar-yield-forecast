@@ -35,7 +35,7 @@ def combine_weather(group_responses, groups=PANEL_GROUPS, section="hourly", inte
     results = {}
     if len(group_responses) != len(groups):
         raise ValueError("Missing panel group weather response")
-    for group, response in zip(groups, group_responses):
+    for group_index, (group, response) in enumerate(zip(groups, group_responses)):
         hourly = response.get(section) or {}
         times = hourly.get("time") or []
         irradiances = hourly.get("global_tilted_irradiance") or []
@@ -53,6 +53,15 @@ def combine_weather(group_responses, groups=PANEL_GROUPS, section="hourly", inte
             kw = estimate_kw(irradiances[i], temps[i] if i < len(temps) else 25, winds[i] if i < len(winds) else 0, group)
             entry["group_kw"][group["id"]] = kw
             entry["kw"] += kw
+            # These site-wide weather values are identical for every panel
+            # orientation. Keep one copy so profile learning can select truly
+            # clear historical days while GTI remains the power multiplier.
+            if group_index == 0:
+                for variable in ("cloud_cover", "direct_radiation", "diffuse_radiation", "shortwave_radiation"):
+                    values = hourly.get(variable) or []
+                    value = _number(values[i], None) if i < len(values) else None
+                    if value is not None:
+                        entry[variable] = value
     return [results[k] for k in sorted(results) if len(results[k]["group_kw"]) == len(groups)]
 
 def day_of_hour(hour_end_unix, interval_seconds=3600, tz=TZ):
@@ -104,7 +113,7 @@ def hourly_power_profile(hourly, tz=TZ):
 def peak_kw_of_profile(profile):
     return round(max((p["power_w"] for p in profile), default=0) / 1000.0, 2)
 
-def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forecast_days=30, tz=TZ):
+def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forecast_days=30, tz=TZ, today_scale=1.0):
     today = now.astimezone(tz).date()
     today_iso = today.isoformat()
     days = [(today + timedelta(days=i)).isoformat() for i in range(forecast_days)]
@@ -114,6 +123,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
     by_day = {d: [] for d in days}
     raw_by_day = {d: 0.0 for d in days}
     sources_by_day = {d: set() for d in days}
+    cloud_by_day = {d: [0.0, 0.0] for d in days}
     now_ts = now.timestamp()
     current_interval_found = False
     for row in forecast_rows:
@@ -124,8 +134,14 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         seconds = row.get("interval_seconds", 3600)
         start = end - seconds
         duration_hours = seconds / 3600
-        calibrated_kw = max(0, row["kw"] * factor * interval_shape(start, seconds, shape or {}))
+        live_scale = today_scale if date == today_iso else 1.0
+        calibrated_kw = max(0, row["kw"] * factor * interval_shape(start, seconds, shape or {}) * live_scale)
         sources_by_day[date].add(row.get("forecast_source", "weather"))
+        cloud = _number(row.get("cloud_cover"), None)
+        if cloud is not None and row["kw"] > 0.1:
+            weight = row["kw"] * duration_hours
+            cloud_by_day[date][0] += cloud * weight
+            cloud_by_day[date][1] += weight
         raw_by_day[date] += calibrated_kw * duration_hours
         if start <= now_ts < end:
             live_kw = calibrated_kw
@@ -143,9 +159,16 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
 
     else:
         sums[today_iso] = actual_today + remaining
-    daily = [{"date": d, "kwh": round(sums[d], 1),
-              "source": "ensemble" if "ensemble" in sources_by_day[d] else "weather"}
-             for d in days if sources_by_day[d]]
+    daily = []
+    for d in days:
+        if not sources_by_day[d]:
+            continue
+        cloud_sum, cloud_weight = cloud_by_day[d]
+        cloud = round(cloud_sum / cloud_weight) if cloud_weight else None
+        weather_mode = None if cloud is None else "clear" if cloud <= 25 else "mixed" if cloud <= 65 else "cloudy"
+        daily.append({"date": d, "kwh": round(sums[d], 1),
+                      "source": "ensemble" if "ensemble" in sources_by_day[d] else "weather",
+                      "weather_mode": weather_mode, "cloud_cover_percent": cloud})
     power_profile_today = hourly_power_profile(by_day[today_iso], tz)
     power_profile_tomorrow = hourly_power_profile(by_day[days[1]], tz)
     return {
@@ -165,7 +188,32 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         "peak_tomorrow_kw": peak_kw_of_profile(power_profile_tomorrow),
         "forecast_date_today": today_iso,
         "forecast_date_tomorrow": days[1],
+        "live_scale_percent": round(today_scale * 100, 1),
     }
+
+
+def recent_live_scale(comparisons, now, tz=TZ, minutes=90):
+    """Return a conservative same-day nowcast correction from recent PV data."""
+    cutoff = now.timestamp() - minutes * 60
+    today = now.astimezone(tz).date()
+    ratios = []
+    for sample in comparisons:
+        try:
+            stamp = datetime.fromisoformat(sample["time"])
+            actual = float(sample["actual_kw"])
+            predicted = float(sample["forecast_interval_mean_kw"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if stamp.timestamp() < cutoff or stamp.astimezone(tz).date() != today or predicted < 1.0:
+            continue
+        ratio = actual / predicted
+        if 0.5 <= ratio <= 1.5:
+            ratios.append(ratio)
+    if len(ratios) < 4:
+        return 1.0, len(ratios)
+    # Live measurements refine the weather forecast but cannot make the
+    # remaining day jump wildly after a short cloud or sensor transient.
+    return max(0.92, min(1.08, median(ratios))), len(ratios)
 
 
 def merge_quarter_hourly(hourly, quarters):
@@ -174,5 +222,11 @@ def merge_quarter_hourly(hourly, quarters):
     result = []
     for row in hourly:
         ends = [row["end"] - 2700 + i * 900 for i in range(4)]
-        result.extend([by_end[e] for e in ends] if all(e in by_end for e in ends) else [row])
+        if all(e in by_end for e in ends):
+            site_weather = {key: row[key] for key in
+                            ("cloud_cover", "direct_radiation", "diffuse_radiation", "shortwave_radiation")
+                            if key in row}
+            result.extend([{**site_weather, **by_end[e]} for e in ends])
+        else:
+            result.append(row)
     return result

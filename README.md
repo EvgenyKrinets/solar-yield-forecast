@@ -1,3 +1,9 @@
+## 1.1.0 — Real-profile weather forecast
+
+Power curves now learn the installation's repeatable shape from provider-confirmed clear historical days. Open-Meteo GTI, cloud cover, direct/diffuse radiation, temperature and wind remain active for every interval; weather is multiplied by the learned local profile instead of being replaced by it. Cloudy days are excluded from profile training, but they still reduce the forecast normally.
+
+The clear-day profile can use five recent complete days, has enough freedom to match broad multi-orientation morning/peak/evening bias, and is validated on held-out clear days. Today's remaining forecast also receives a bounded ±8% correction from the latest 90 minutes of real PV power. Diagnostics expose selected clear days, weather mode, cloud cover and live-correction support.
+
 ## 1.0.4 — HACS download compatibility
 
 HACS now installs the integration from GitHub's standard tagged source archive
