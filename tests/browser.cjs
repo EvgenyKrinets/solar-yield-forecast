@@ -1,6 +1,9 @@
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
+const fs=require('node:fs');
 (async()=>{
+ const frontend=fs.readFileSync('custom_components/solar_yield_forecast/frontend/solar-comparison-card.js','utf8');
+ const panelTag=frontend.match(/const SOLAR_PANEL_TAG='([^']+)'/)[1];
  const browser=await chromium.launch({headless:true,...(process.env.BROWSER_CHANNEL ? {channel:process.env.BROWSER_CHANNEL} : {})});
  const page=await browser.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(String(e)));
@@ -96,9 +99,9 @@ const assert=require('node:assert/strict');
  await page.locator('solar-comparison-card').evaluate(c=>{c._view=[8.389241211,17.6205801];c._render();});
  const labels=await page.locator('svg text').allTextContents();
  assert.ok(labels.filter(t=>t.includes(':')).every(t=>/^\d{2}:\d{2}$/.test(t)));
- await page.evaluate(()=>{
+ await page.evaluate(panelTag=>{
    window.panelMessages=[];
-   const panel=document.createElement('solar-yield-forecast-panel-v1-3-0');
+   const panel=document.createElement(panelTag);
    panel.panel={config:{title:'Configured roof',pv_entity:'sensor.real_pv',energy_entity:'sensor.real_energy',forecast_entity:'sensor.real_profile',day_forecast_entity:'sensor.real_today',time_zone:'Asia/Jerusalem'}};
    panel.hass={...window.fixture,user:{is_admin:true},states:{...window.fixture.states,
      'sensor.real_pv':window.fixture.states['sensor.total_dc_power'],
@@ -106,7 +109,7 @@ const assert=require('node:assert/strict');
      'sensor.real_today':window.fixture.states['sensor.solar_yield_forecast_today']},
      connection:{sendMessagePromise:async message=>{window.panelMessages.push(message);return message.type==='lovelace/dashboards/list'?[]:{}}}};
    document.body.append(panel);window.panelFixture=panel;
- });
+ },panelTag);
  await page.waitForFunction(()=>window.panelMessages.some(message=>message.type==='lovelace/config/save'));
  const managed=await page.evaluate(()=>{
    const card=window.panelFixture.shadowRoot.querySelector('solar-comparison-card');
