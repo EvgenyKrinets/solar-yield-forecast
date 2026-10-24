@@ -41,6 +41,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.ensemble_rows = []
         self.shape_factors = {}
         self.shape_report = {"status": "not_loaded"}
+        self.shape_profile_updated_at = None
         self._shape_day = None
         self._hourly_weather = []
         self.archive_rows = []
@@ -72,7 +73,28 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.daily_baselines = data.get("daily_baselines", {})
         self.daily_errors = data.get("daily_errors", {})
         self.live_comparisons = data.get("live_comparisons", [])[-5000:]
+        if data.get("shape_signature") == self._shape_signature():
+            try:
+                stored_shape = {
+                    str(hour): float(value)
+                    for hour, value in data.get("shape_factors", {}).items()
+                    if 0 <= int(hour) <= 23 and 0.5 <= float(value) <= 1.5
+                }
+            except (TypeError, ValueError):
+                stored_shape = {}
+            if stored_shape:
+                self.shape_factors = stored_shape
+                self.shape_report = data.get("shape_report", {"status": "persisted_active"})
+                self.shape_profile_updated_at = data.get("shape_profile_updated_at")
         self._ingest_state(self.hass.states.get(self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR)))
+
+    def _shape_signature(self):
+        """Invalidate a learned profile only when the physical system changes."""
+        return json.dumps({
+            "power_sensor": self.config.get("dc_power_sensor", DEFAULT_DC_SENSOR),
+            "groups": self.groups,
+            "time_zone": self.time_zone,
+        }, sort_keys=True, separators=(",", ":"))
 
     async def _one_group(self, base, group, extras):
         params = {
@@ -202,6 +224,13 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             # short purge window. About 5,000 five-minute daylight samples
             # cover more than a month without touching ESP32/inverter storage.
             "live_comparisons": self.live_comparisons[-5000:],
+            # The installation's validated intraday geometry is stable across
+            # Home Assistant restarts.  A configuration signature prevents a
+            # profile learned for an old array layout from being reused.
+            "shape_factors": self.shape_factors,
+            "shape_report": self.shape_report,
+            "shape_profile_updated_at": self.shape_profile_updated_at,
+            "shape_signature": self._shape_signature(),
         }, 180)
 
     def _update_scorecard(self, now, result):
@@ -253,6 +282,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "actual_today": self._actual_today(now),
             "shape_calibration": self.shape_report,
             "shape_factors_utc": self.shape_factors,
+            "shape_profile_updated_at": self.shape_profile_updated_at,
             "live_correction_samples": live_samples,
             "site": {
                 "name": self.config.get("site_name", self.entry.title),
@@ -318,12 +348,36 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 except (KeyError, TypeError, ValueError):
                     continue
             hours = await self.hass.async_add_executor_job(power_hours, states, now.timestamp())
-            self.shape_factors, self.shape_report = learn_shape(hours, self._hourly_weather, self.factor, today, self.tz)
+            candidate, report = learn_shape(hours, self._hourly_weather, self.factor, today, self.tz)
+            if candidate:
+                self.shape_factors = candidate
+                self.shape_profile_updated_at = now.isoformat()
+                self.shape_report = {**report, "profile_source": "newly_validated"}
+            elif self.shape_factors:
+                # A short Recorder window or one unusual validation day must
+                # not erase a profile already validated for the same physical
+                # array.  It remains active until a new profile passes.
+                self.shape_report = {
+                    **report,
+                    "latest_candidate_status": report.get("status"),
+                    "status": "persisted_active",
+                    "profile_source": "stored_validated_profile",
+                    "profile_updated_at": self.shape_profile_updated_at,
+                }
+            else:
+                self.shape_report = report
         except Exception:
             # Optional calibration must never make the main forecast unavailable.
             _LOGGER.exception("Could not learn intraday power profile")
-            self.shape_factors = {}
-            self.shape_report = {"status": "history_error"}
+            if self.shape_factors:
+                self.shape_report = {
+                    "status": "persisted_active",
+                    "latest_candidate_status": "history_error",
+                    "profile_source": "stored_validated_profile",
+                    "profile_updated_at": self.shape_profile_updated_at,
+                }
+            else:
+                self.shape_report = {"status": "history_error"}
 
     def _ingest_state(self, state):
         if state is None or state.state in ("unknown", "unavailable", "none"):

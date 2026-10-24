@@ -71,8 +71,24 @@ def test_shape_and_model_total_separate_from_actual():
     row={'end':start.timestamp()+900,'kw':4,'interval_seconds':900}
     result=forecast_summary([row],1,90,start+timedelta(hours=2),{str(h):.5 for h in range(24)})
     assert result['today']==90
-    assert result['model_today']==.5
-    assert result['power_profile_today'][0]['power_w']==2000
+    assert result['model_today']==1
+    assert result['power_profile_today'][0]['power_w']==4000
+
+
+def test_shape_redistributes_power_without_changing_daily_energy():
+    start=datetime(2026,10,24,8,tzinfo=TZ)
+    rows=[{'end':(start+timedelta(hours=i+1)).timestamp(),'kw':10}
+          for i in range(6)]
+    utc_hours=[datetime.fromtimestamp(row['end']-3600,timezone.utc).hour for row in rows]
+    factors={str(hour):.6 for hour in range(24)}
+    factors[str(utc_hours[2])]=1.6
+    factors[str(utc_hours[3])]=1.6
+    result=forecast_summary(rows,.82,None,start,shape=factors)
+    powers=[point['power_w'] for point in result['power_profile_today']]
+    assert result['model_today']==49.2
+    assert abs(sum(point['energy_kwh'] for point in result['power_profile_today'])-49.2)<1e-4
+    assert max(powers)>8200
+    assert min(powers)<8200
 
 
 def test_shape_continuity_and_interval_energy():
@@ -110,11 +126,12 @@ def test_clear_days_build_real_profile_while_cloudy_days_are_excluded():
     assert factors['15'] < 1
 
 
-def test_cloudy_forecast_is_still_multiplied_by_learned_profile():
+def test_constant_shape_cannot_multiply_weather_energy():
     now=datetime(2026,10,24,8,tzinfo=TZ)
     rows=[{'end':(now+timedelta(hours=1)).timestamp(),'kw':10},
           {'end':(now+timedelta(hours=2)).timestamp(),'kw':5}]
     shaped=forecast_summary(rows,1,None,now,{str(hour):1.2 for hour in range(24)})
     powers=[point['power_w'] for point in shaped['power_profile_today']]
-    assert max(powers)==12000
-    assert min(powers)==6000
+    assert max(powers)==10000
+    assert min(powers)==5000
+    assert shaped['model_today']==15

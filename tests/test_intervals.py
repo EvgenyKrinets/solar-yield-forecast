@@ -79,6 +79,9 @@ def test_recent_live_scale_is_bounded_and_requires_four_samples():
     scale,count=recent_live_scale(samples,now,TZ)
     assert count==5
     assert scale==1.08
+    confident=samples+[{'time':(now-timedelta(minutes=5*i+2)).isoformat(),
+                        'actual_kw':12,'forecast_interval_mean_kw':10} for i in range(3)]
+    assert recent_live_scale(confident,now,TZ)==(1.2,8)
 
 
 def test_today_live_scale_does_not_change_tomorrow():

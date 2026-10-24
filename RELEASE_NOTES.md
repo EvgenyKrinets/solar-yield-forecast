@@ -1,3 +1,22 @@
+## 1.2.1 — Stable real-profile height calibration
+
+- Separate the daily energy forecast from the intraday curve shape. Historical
+  shape factors now redistribute the predicted kWh across the day without
+  lowering or raising the independently calibrated daily total.
+- Preserve the validated real production profile in Home Assistant storage so
+  a restart or one failed validation day cannot replace it with the broad,
+  low physical fallback curve.
+- Invalidate the stored profile automatically when the power sensor, time zone
+  or physical panel-group configuration changes.
+- Let consistent live measurements strengthen today's correction gradually:
+  four samples start gently, while eight or more samples can correct a
+  systematic height error by up to 20%.
+- Publish the stored profile timestamp and per-day energy normalizers as sensor
+  diagnostics.
+
+Update through HACS and restart Home Assistant. The first refresh validates the
+Recorder history; subsequent restarts retain the last successful site profile.
+
 ## 1.2.0 — One-click dashboard and sidebar application
 
 - Register a dedicated **Solar Forecast** application in the Home Assistant

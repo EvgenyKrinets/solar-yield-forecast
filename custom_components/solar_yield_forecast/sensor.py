@@ -61,6 +61,8 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
                 "model_today_kwh": values.get("model_today"),
                 "shape_calibration": values.get("shape_calibration", {}),
                 "shape_factors_utc": values.get("shape_factors_utc", {}),
+                "shape_profile_updated_at": values.get("shape_profile_updated_at"),
+                "shape_energy_normalizers": values.get("shape_energy_normalizers", {}),
                 "forecast_method": "real_clear_day_profile_x_continuous_weather",
                 "live_scale_percent": values.get("live_scale_percent"),
                 "live_correction_samples": values.get("live_correction_samples"),
