@@ -1,3 +1,15 @@
+## 1.1.1 — Short Recorder gap recovery
+
+- Linearly interpolate brief `unknown` or `unavailable` PV power gaps lasting
+  up to 10 minutes, using the measured values immediately before and after the
+  interruption.
+- Prevent a short Home Assistant restart from discarding entire 15-minute
+  chart intervals and making a few minutes of downtime look like an hour.
+- Preserve honest missing-data semantics: interruptions longer than 10 minutes
+  remain visible gaps and are not included as measured history.
+- Keep the forecast model, weather correction, configuration and learned
+  production history unchanged.
+
 ## 1.1.0 — Real-profile forecast with continuous weather correction
 
 - Learn the installation's real intraday shape only from provider-confirmed clear, complete historical days.
