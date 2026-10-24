@@ -1,3 +1,15 @@
+## 1.1.0 — Real-profile forecast with continuous weather correction
+
+- Learn the installation's real intraday shape only from provider-confirmed clear, complete historical days.
+- Continue applying Open-Meteo GTI, cloud cover, direct/diffuse radiation, temperature and wind to every forecast interval; there is no weather on/off switch.
+- Exclude cloudy days from the stable installation profile while retaining their normal weather losses in forecasts.
+- Replace the former ±18%, five-hour profile restriction with a validated three-hour clear-profile smoother and an 8% per-hour slope guard, allowing broad orientation and shading differences without narrow artificial notches.
+- Correct today's remaining forecast from the latest 90 minutes of measured PV power, bounded to ±8% so brief clouds and sensor transients cannot cause large jumps.
+- Publish clear-day counts, weather classification, energy-weighted cloud cover and live-correction diagnostics in sensor attributes.
+- Preserve all configuration, learned storage, daily observations and dashboard behaviour.
+
+Update through HACS, restart Home Assistant and allow the first refresh to analyse Recorder history. No reconfiguration is required.
+
 ## 1.0.4 — HACS download compatibility
 
 - Use the standard HACS tagged-source installation path instead of a custom ZIP release asset.
