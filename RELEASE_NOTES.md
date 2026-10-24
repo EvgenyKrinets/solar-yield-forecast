@@ -1,3 +1,14 @@
+## 1.4.1 — Home Assistant location and in-app settings
+
+- Use Home Assistant's configured home name, latitude, longitude and time zone
+  as the default forecast site; remove country and city search from setup.
+- Show the active Home Assistant location as read-only information and offer
+  one explicit switch for a different manually entered site.
+- Keep daily-energy and live-power sensor selection on the same first step.
+- Add an administrator-only Settings button to the Solar Forecast sidebar app,
+  linking directly to the integration page where the same site, sensor and
+  panel-group options can be changed.
+
 ## 1.4.0 — One-page city selection and coordinate confirmation
 
 - Keep country, city search, exact-city selection and production sensors on

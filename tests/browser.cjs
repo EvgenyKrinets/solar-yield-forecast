@@ -114,9 +114,11 @@ const fs=require('node:fs');
  const managed=await page.evaluate(()=>{
    const card=window.panelFixture.shadowRoot.querySelector('solar-comparison-card');
    const saved=window.panelMessages.find(message=>message.type==='lovelace/config/save');
-   return {pv:card.config.pv_entity,energy:card.config.energy_entity,views:saved.config.views,created:window.panelMessages.some(message=>message.type==='lovelace/dashboards/create')};
+   const settings=window.panelFixture.shadowRoot.querySelector('.settings');
+   return {pv:card.config.pv_entity,energy:card.config.energy_entity,views:saved.config.views,created:window.panelMessages.some(message=>message.type==='lovelace/dashboards/create'),settingsHidden:settings.hidden,settingsTitle:settings.title};
  });
  assert.equal(managed.pv,'sensor.real_pv');assert.equal(managed.energy,'sensor.real_energy');
+ assert.equal(managed.settingsHidden,false);assert.equal(managed.settingsTitle,'Settings');
  assert.ok(managed.created);assert.ok(Array.isArray(managed.views));assert.equal(managed.views[0].cards.length,1);
  assert.deepEqual(errors,[]);await browser.close();console.log('Browser: curves, readable fonts, responsive bars, hover, compact, invalid timestamps, refresh failure passed');
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -3,11 +3,9 @@
     "step": {
       "user": {
         "title": "Solar site",
-        "description": "Select a country, enter a city or place name and submit to search. This same page will then show a city dropdown with coordinates and time zone in every option.",
+        "description": "Home Assistant location: **{home_name}** · {latitude}, {longitude} · {time_zone}. Keep manual location disabled to use these system settings.",
         "data": {
-          "country_code": "Country",
-          "site_name": "City or place name",
-          "manual_coordinates": "Enter coordinates manually",
+          "manual_coordinates": "Use a different location manually",
           "daily_sensor": "Daily PV yield sensor (kWh, resets each day)",
           "dc_power_sensor": "Current PV power sensor (W or kW)"
         }
@@ -23,6 +21,7 @@
         "title": "Manual coordinates",
         "description": "Use this fallback for a roof or site that cannot be found by place name.",
         "data": {
+          "site_name": "Site name",
           "latitude": "Latitude",
           "longitude": "Longitude",
           "time_zone": "IANA time zone (for example Europe/Berlin)"
@@ -58,11 +57,9 @@
     "step": {
       "init": {
         "title": "Site and sensors",
-        "description": "Keep the existing city name, or enter another place and submit to search. This same page will show a city dropdown with coordinates and time zone in every option.",
+        "description": "Home Assistant location: **{home_name}** · {latitude}, {longitude} · {time_zone}. Keep manual location disabled to use these system settings.",
         "data": {
-          "country_code": "Country",
-          "site_name": "City or place name",
-          "manual_coordinates": "Enter coordinates manually",
+          "manual_coordinates": "Use a different location manually",
           "daily_sensor": "Daily PV yield sensor",
           "dc_power_sensor": "Current PV power sensor"
         }
@@ -78,6 +75,7 @@
         "title": "Manual coordinates",
         "description": "Enter coordinates and an IANA time zone manually.",
         "data": {
+          "site_name": "Site name",
           "latitude": "Latitude",
           "longitude": "Longitude",
           "time_zone": "IANA time zone"
