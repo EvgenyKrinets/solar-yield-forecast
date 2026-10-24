@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Solar site",
-        "description": "Select a country and enter a city or place name. The next page will show matching locations and fill coordinates and time zone automatically.",
+        "description": "Select a country, enter a city or place name and submit to search. This same page will then show a city dropdown with coordinates and time zone in every option.",
         "data": {
           "country_code": "Country",
           "site_name": "City or place name",
@@ -58,7 +58,7 @@
     "step": {
       "init": {
         "title": "Site and sensors",
-        "description": "Keep the existing city name to retain its location, or enter another city to search again. Changes apply after the panel-group steps are saved.",
+        "description": "Keep the existing city name, or enter another place and submit to search. This same page will show a city dropdown with coordinates and time zone in every option.",
         "data": {
           "country_code": "Country",
           "site_name": "City or place name",

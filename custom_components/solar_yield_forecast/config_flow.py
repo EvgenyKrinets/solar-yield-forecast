@@ -105,6 +105,30 @@ def _location_result_schema(locations):
     })
 
 
+def _location_selection_schema(hass, values, locations):
+    """Keep search, exact-place selection and sensors on one HA flow page."""
+    base = _search_schema(hass, values).schema
+    options = [
+        {"value": location["key"], "label": location_label(location)}
+        for location in locations
+    ]
+    # Insert the exact city immediately after the search text. Home Assistant
+    # preserves schema order in its native config-flow form.
+    schema = {}
+    for field, value in base.items():
+        schema[field] = value
+        if getattr(field, "schema", None) == CONF_SITE_NAME:
+            schema[vol.Required(CONF_LOCATION_RESULT, default=locations[0]["key"])] = (
+                selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                )
+            )
+    return vol.Schema(schema)
+
+
 async def _async_find_locations(hass, name, country_code):
     """Resolve a city/place name through the Open-Meteo Geocoding API."""
     language = str(getattr(hass.config, "language", "en") or "en")
@@ -214,6 +238,12 @@ class SolarYieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._site = _site_from_search(user_input)
             if user_input.get(CONF_MANUAL_COORDINATES):
                 return await self.async_step_manual()
+            if CONF_LOCATION_RESULT in user_input:
+                location = self._locations.get(str(user_input[CONF_LOCATION_RESULT]))
+                if location is not None:
+                    _apply_location(self._site, location)
+                    self._groups = []
+                    return await self.async_step_group()
             try:
                 locations = await _async_find_locations(
                     self.hass,
@@ -233,7 +263,12 @@ class SolarYieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors={CONF_SITE_NAME: "location_not_found"},
                 )
             self._locations = {location["key"]: location for location in locations}
-            return await self.async_step_location()
+            return self.async_show_form(
+                step_id="user",
+                data_schema=_location_selection_schema(
+                    self.hass, user_input, locations
+                ),
+            )
         return self.async_show_form(step_id="user", data_schema=_search_schema(self.hass, {}))
 
     async def async_step_location(self, user_input=None):
@@ -327,6 +362,11 @@ class SolarYieldOptionsFlow(config_entries.OptionsFlow):
             self._index = 0
             if user_input.get(CONF_MANUAL_COORDINATES):
                 return await self.async_step_manual()
+            if CONF_LOCATION_RESULT in user_input:
+                location = self._locations.get(str(user_input[CONF_LOCATION_RESULT]))
+                if location is not None:
+                    _apply_location(self._site, location)
+                    return await self.async_step_group()
             same_place = (
                 str(user_input[CONF_SITE_NAME]).strip().casefold()
                 == str(current.get(CONF_SITE_NAME, "")).strip().casefold()
@@ -362,7 +402,12 @@ class SolarYieldOptionsFlow(config_entries.OptionsFlow):
                     errors={CONF_SITE_NAME: "location_not_found"},
                 )
             self._locations = {location["key"]: location for location in locations}
-            return await self.async_step_location()
+            return self.async_show_form(
+                step_id="init",
+                data_schema=_location_selection_schema(
+                    self.hass, user_input, locations
+                ),
+            )
         return self.async_show_form(step_id="init", data_schema=_search_schema(self.hass, current))
 
     async def async_step_location(self, user_input=None):
