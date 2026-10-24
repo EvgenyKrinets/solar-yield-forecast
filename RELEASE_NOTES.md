@@ -1,4 +1,4 @@
-## 1.3.1 — Validated profile activation and scoped live correction
+## 1.3.2 — Validated profile activation and scoped live correction
 
 - Accept a short-history installation profile when two held-out days show at
   least a 5% whole-day WAPE improvement and the independently measured peak
