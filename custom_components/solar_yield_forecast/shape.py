@@ -121,7 +121,11 @@ def learn_shape(hours, weather, factor, today, tz):
         training_count = len(days) - validation_count
         min_support = max(4, min(10, (training_count*3+4)//5))
         min_test, min_test_energy = 12, 30
-        improvement, peak_improvement = .90, .97
+        # Two held-out days are noisy enough that demanding a full 10% WAPE
+        # gain rejects useful, repeatable profiles on a boundary (for example
+        # 12.90% -> 11.67%).  Still require a material 5% whole-day gain and
+        # an independently non-worsening peak before activating the profile.
+        improvement, peak_improvement = .95, 1.0
         history_mode = 'short_history'
     else:
         validation_count, history_mode = min(2, len(days)), 'insufficient'
@@ -209,6 +213,8 @@ def learn_shape(hours, weather, factor, today, tz):
                   peak_before_wape_percent=round(peak_before*100,2), peak_after_wape_percent=round(peak_after*100,2),
                   minimum_hour_support=min_support,
                   weather_always_applied=True,
+                  required_overall_improvement_percent=round((1-improvement)*100,1),
+                  allowed_peak_regression_percent=round((peak_improvement-1)*100,1),
                   maximum_hourly_factor_change=max_hourly_change,
                   factor_support_utc={str(hour): count for hour, count in support.items()})
     return (factors if accepted else {}), report

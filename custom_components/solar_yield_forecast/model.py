@@ -164,10 +164,13 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         seconds = row.get("interval_seconds", 3600)
         start = end - seconds
         duration_hours = seconds / 3600
-        live_scale = today_scale if date == today_iso else 1.0
         shape_value = interval_shape(start, seconds, shape or {})
         shape_mean = shape_normalizers.get(date, 1.0)
-        calibrated_kw = max(0, row["kw"] * factor * shape_value / shape_mean * live_scale)
+        # The full-day power profile is the forecast that was produced from
+        # weather plus the learned installation shape.  A correction inferred
+        # late in the day must not rewrite its morning or midday peak.
+        calibrated_kw = max(0, row["kw"] * factor * shape_value / shape_mean)
+        live_kw_value = calibrated_kw * today_scale if date == today_iso else calibrated_kw
         sources_by_day[date].add(row.get("forecast_source", "weather"))
         cloud = _number(row.get("cloud_cover"), None)
         if cloud is not None and row["kw"] > 0.1:
@@ -176,12 +179,14 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
             cloud_by_day[date][1] += weight
         raw_by_day[date] += calibrated_kw * duration_hours
         if start <= now_ts < end:
-            live_kw = calibrated_kw
+            live_kw = live_kw_value
             current_interval_found = True
         by_day[date].append({"start": datetime.fromtimestamp(start, tz).isoformat(), "kw": calibrated_kw, "interval_seconds": seconds})
         if date == today_iso:
             fraction_left = max(0.0, min(1.0, (end - now_ts) / seconds))
-            remaining += calibrated_kw * fraction_left * duration_hours
+            # Same-day live correction affects only energy that is still in
+            # the future. It never scales the already elapsed chart profile.
+            remaining += live_kw_value * fraction_left * duration_hours
         else:
             sums[date] += calibrated_kw * duration_hours
     if not current_interval_found:
@@ -221,6 +226,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         "forecast_date_today": today_iso,
         "forecast_date_tomorrow": days[1],
         "live_scale_percent": round(today_scale * 100, 1),
+        "live_scale_scope": "remaining_today_only",
         "shape_energy_normalizers": {
             day: round(value, 5) for day, value in shape_normalizers.items()
         },

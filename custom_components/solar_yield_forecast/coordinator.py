@@ -17,7 +17,9 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.core import callback
 from .const import (CONF_PANEL_GROUPS, CONF_TIME_ZONE, DOMAIN, PANEL_GROUPS, API_ARCHIVE, API_ENSEMBLE, API_FORECAST, DEFAULT_DAILY_SENSOR, DEFAULT_DC_SENSOR, TIMEZONE)
-from .model import (combine_weather, calibration, forecast_summary, open_meteo_azimuth, merge_quarter_hourly, recent_live_scale)
+from .model import (combine_weather, calibration, daily_shape_normalizers, day_of_hour,
+                    forecast_summary, open_meteo_azimuth, merge_quarter_hourly,
+                    recent_live_scale)
 _LOGGER = logging.getLogger(__name__)
 
 class SolarYieldCoordinator(DataUpdateCoordinator):
@@ -353,6 +355,18 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 self.shape_factors = candidate
                 self.shape_profile_updated_at = now.isoformat()
                 self.shape_report = {**report, "profile_source": "newly_validated"}
+                # Today's stored comparisons were made against the previous
+                # model. Reusing them would immediately counteract the newly
+                # learned profile with an obsolete live scale.
+                retained = []
+                for sample in self.live_comparisons:
+                    try:
+                        sample_day = datetime.fromisoformat(sample["time"]).astimezone(self.tz).date().isoformat()
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    if sample_day != today:
+                        retained.append(sample)
+                self.live_comparisons = retained
             elif self.shape_factors:
                 # A short Recorder window or one unusual validation day must
                 # not erase a profile already validated for the same physical
@@ -421,7 +435,16 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             now = datetime.now(timezone.utc)
             if self.live_comparisons and (now - datetime.fromisoformat(self.live_comparisons[-1]["time"]) < timedelta(minutes=5)):
                 return
-            predicted = next((r["kw"] * self.factor * interval_shape(r["end"]-r.get("interval_seconds",3600), r.get("interval_seconds",3600), self.shape_factors) for r in self.forecast_rows if r["end"] - r.get("interval_seconds", 3600) <= now.timestamp() < r["end"]), None)
+            normalizers = daily_shape_normalizers(self.forecast_rows, self.shape_factors, self.tz)
+            predicted = None
+            for row in self.forecast_rows:
+                seconds = row.get("interval_seconds", 3600)
+                start = row["end"] - seconds
+                if start <= now.timestamp() < row["end"]:
+                    day = day_of_hour(row["end"], seconds, self.tz)
+                    shape = interval_shape(start, seconds, self.shape_factors)
+                    predicted = row["kw"] * self.factor * shape / normalizers.get(day, 1.0)
+                    break
             if predicted is None or predicted < 0.2:
                 return
             self.live_comparisons.append({
