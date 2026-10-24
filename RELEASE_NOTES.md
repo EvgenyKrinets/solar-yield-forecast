@@ -1,3 +1,11 @@
+## 1.0.4 — HACS download compatibility
+
+- Use the standard HACS tagged-source installation path instead of a custom ZIP release asset.
+- Avoid the GitHub release-asset redirect whose oversized security header can be rejected by Home Assistant's `aiohttp` client.
+- Keep the 1.0.3 settings-selector fix unchanged; existing configuration, learned calibration and production history are preserved.
+
+Update through HACS and restart Home Assistant. No integration reconfiguration is required.
+
 ## 1.0.1 — Installed-capacity review
 
 - Add a final review step to both initial setup and Configure flows.
