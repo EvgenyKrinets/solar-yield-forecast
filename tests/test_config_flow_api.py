@@ -59,3 +59,13 @@ def test_options_flow_uses_config_entry_injected_by_home_assistant() -> None:
         and node.attr == "config_entry"
         for node in ast.walk(init_step)
     )
+
+
+def test_number_selectors_use_home_assistant_compatible_configuration() -> None:
+    """Coordinate precision and optional units must pass HA selector validation."""
+    source = CONFIG_FLOW.read_text(encoding="utf-8")
+
+    assert '_number(-90, 90, "any", "°")' in source
+    assert '_number(-180, 180, "any", "°")' in source
+    assert "0.00001" not in source
+    assert 'if unit is not None:' in source
