@@ -98,7 +98,7 @@ const assert=require('node:assert/strict');
  assert.ok(labels.filter(t=>t.includes(':')).every(t=>/^\d{2}:\d{2}$/.test(t)));
  await page.evaluate(()=>{
    window.panelMessages=[];
-   const panel=document.createElement('solar-yield-forecast-panel-v1-2-1');
+   const panel=document.createElement('solar-yield-forecast-panel-v1-3-0');
    panel.panel={config:{title:'Configured roof',pv_entity:'sensor.real_pv',energy_entity:'sensor.real_energy',forecast_entity:'sensor.real_profile',day_forecast_entity:'sensor.real_today',time_zone:'Asia/Jerusalem'}};
    panel.hass={...window.fixture,user:{is_admin:true},states:{...window.fixture.states,
      'sensor.real_pv':window.fixture.states['sensor.total_dc_power'],

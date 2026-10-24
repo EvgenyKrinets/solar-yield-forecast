@@ -17,6 +17,9 @@ PANEL_GROUPS = [
 ]
 TIMEZONE = "Asia/Jerusalem"
 CONF_SITE_NAME = "site_name"
+CONF_COUNTRY_CODE = "country_code"
+CONF_MANUAL_COORDINATES = "manual_coordinates"
+CONF_LOCATION_RESULT = "location_result"
 CONF_TIME_ZONE = "time_zone"
 CONF_PANEL_GROUPS = "panel_groups"
 CONF_GROUP_NAME = "group_name"
@@ -30,3 +33,4 @@ MAX_PANEL_GROUPS = 12
 API_FORECAST = "https://api.open-meteo.com/v1/forecast"
 API_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 API_ENSEMBLE = "https://ensemble-api.open-meteo.com/v1/ensemble"
+API_GEOCODING = "https://geocoding-api.open-meteo.com/v1/search"
