@@ -69,3 +69,14 @@ def test_number_selectors_use_home_assistant_compatible_configuration() -> None:
     assert '_number(-180, 180, "any", "°")' in source
     assert "0.00001" not in source
     assert 'if unit is not None:' in source
+
+
+def test_country_city_search_uses_native_selector_and_keeps_manual_fallback() -> None:
+    source = CONFIG_FLOW.read_text(encoding="utf-8")
+
+    assert "selector.CountrySelector(" in source
+    assert "API_GEOCODING" in source
+    assert '"countryCode": str(country_code).upper()' in source
+    assert "async_step_location" in source
+    assert "async_step_manual" in source
+    assert "normalized_locations(payload)" in source

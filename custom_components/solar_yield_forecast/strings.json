@@ -3,14 +3,29 @@
     "step": {
       "user": {
         "title": "Solar site",
-        "description": "Enter the site location and select Home Assistant production sensors. Coordinates and time zone default to the Home Assistant location.",
+        "description": "Select a country and enter a city or place name. The next page will show matching locations and fill coordinates and time zone automatically.",
         "data": {
-          "site_name": "Site or city name",
-          "latitude": "Latitude",
-          "longitude": "Longitude",
-          "time_zone": "IANA time zone (for example Europe/Berlin)",
+          "country_code": "Country",
+          "site_name": "City or place name",
+          "manual_coordinates": "Enter coordinates manually",
           "daily_sensor": "Daily PV yield sensor (kWh, resets each day)",
           "dc_power_sensor": "Current PV power sensor (W or kW)"
+        }
+      },
+      "location": {
+        "title": "Choose the exact location",
+        "description": "Select the correct city or area. Coordinates and the IANA time zone will be saved automatically.",
+        "data": {
+          "location_result": "Matching location"
+        }
+      },
+      "manual": {
+        "title": "Manual coordinates",
+        "description": "Use this fallback for a roof or site that cannot be found by place name.",
+        "data": {
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "time_zone": "IANA time zone (for example Europe/Berlin)"
         }
       },
       "group": {
@@ -34,21 +49,38 @@
       "already_configured": "This forecast is already configured. Use Configure to change the site or panel groups."
     },
     "error": {
-      "invalid_time_zone": "Enter a valid IANA time zone, for example Europe/Berlin."
+      "invalid_time_zone": "Enter a valid IANA time zone, for example Europe/Berlin.",
+      "location_not_found": "No matching location was found in the selected country. Check the spelling or use manual coordinates.",
+      "geocoding_unavailable": "The location search service is temporarily unavailable. Try again or use manual coordinates."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Site and sensors",
-        "description": "Changes are applied automatically after the panel-group steps are saved.",
+        "description": "Keep the existing city name to retain its location, or enter another city to search again. Changes apply after the panel-group steps are saved.",
         "data": {
-          "site_name": "Site or city name",
-          "latitude": "Latitude",
-          "longitude": "Longitude",
-          "time_zone": "IANA time zone",
+          "country_code": "Country",
+          "site_name": "City or place name",
+          "manual_coordinates": "Enter coordinates manually",
           "daily_sensor": "Daily PV yield sensor",
           "dc_power_sensor": "Current PV power sensor"
+        }
+      },
+      "location": {
+        "title": "Choose the exact location",
+        "description": "Select the correct city or area. Coordinates and time zone will be updated automatically.",
+        "data": {
+          "location_result": "Matching location"
+        }
+      },
+      "manual": {
+        "title": "Manual coordinates",
+        "description": "Enter coordinates and an IANA time zone manually.",
+        "data": {
+          "latitude": "Latitude",
+          "longitude": "Longitude",
+          "time_zone": "IANA time zone"
         }
       },
       "group": {
@@ -71,7 +103,9 @@
     },
     "error": {
       "at_least_one_group": "At least one enabled panel group is required.",
-      "invalid_time_zone": "Enter a valid IANA time zone, for example Europe/Berlin."
+      "invalid_time_zone": "Enter a valid IANA time zone, for example Europe/Berlin.",
+      "location_not_found": "No matching location was found in the selected country. Check the spelling or use manual coordinates.",
+      "geocoding_unavailable": "The location search service is temporarily unavailable. Try again or use manual coordinates."
     }
   }
 }

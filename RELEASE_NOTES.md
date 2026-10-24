@@ -1,3 +1,19 @@
+## 1.3.0 — Country and city location search
+
+- Replace mandatory coordinate entry during initial setup with a translated
+  Home Assistant country selector and city/place-name search.
+- Query the Open-Meteo Geocoding API and present up to ten unambiguous matches
+  including administrative area, country and WGS84 coordinates.
+- Fill latitude, longitude and the IANA time zone automatically from the
+  selected result.
+- Keep an explicit manual-coordinate fallback for remote roofs and places not
+  present in the geocoding database.
+- Use the same workflow in Configure; leaving the existing city unchanged
+  preserves its coordinates without performing another search.
+
+No API key is required. Place search follows the Home Assistant interface
+language where Open-Meteo provides localized names.
+
 ## 1.2.1 — Stable real-profile height calibration
 
 - Separate the daily energy forecast from the intraday curve shape. Historical

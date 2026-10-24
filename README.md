@@ -23,6 +23,10 @@
 
 Solar Yield Forecast turns weather data and your own production history into an installation-specific solar forecast. It supports arbitrary locations, multiple panel orientations, local learning, interactive history and forecasts up to 30 days.
 
+The setup wizard can resolve a country and city through the Open-Meteo
+Geocoding API (location data based on GeoNames), automatically filling WGS84
+coordinates and the IANA time zone. Manual coordinates remain available.
+
 The learning layer runs inside Home Assistant. It is adaptive statistical intelligence rather than a remote black-box AI service: your measured production history remains local, while only site coordinates and panel geometry are sent to Open-Meteo for weather and irradiance forecasts.
 
 ## Why this integration?
@@ -76,6 +80,7 @@ forecast power = physical PV estimate × daily calibration × learned shape × b
 
 - UI setup and reconfiguration—no YAML required for the integration itself.
 - Custom site name, latitude, longitude and IANA time zone.
+- Country/city search with automatic coordinates and time zone.
 - Selectable daily-energy and live-PV-power sensors.
 - Up to 12 independent panel groups.
 - Automatic installed-capacity summary before saving.
@@ -115,7 +120,9 @@ forecast power = physical PV estimate × daily calibration × learned shape × b
 5. Install **Solar Yield Forecast**.
 6. Restart Home Assistant.
 7. Open **Settings → Devices & services → Add integration → Solar Yield Forecast**.
-8. Complete the site and panel-group wizard, then open **Solar Forecast** from
+8. Select a country, enter a city, choose the correct search result, and
+   complete the panel-group wizard. Coordinates and the IANA time zone are
+   filled automatically. Then open **Solar Forecast** from
    the Home Assistant sidebar. No manual dashboard YAML is required.
 
 Or use the **Open in HACS** button at the top of this page.
