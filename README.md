@@ -1,3 +1,10 @@
+## 1.0.4 — HACS download compatibility
+
+HACS now installs the integration from GitHub's standard tagged source archive
+instead of a custom release asset. This avoids an `aiohttp` header-size failure
+that could prevent Home Assistant from downloading 1.0.3 even though its ZIP
+file was valid. Integration settings and stored production history are unchanged.
+
 ## 1.0.3 — Settings form selector fix
 
 The site form now uses Home Assistant-compatible coordinate precision and no
