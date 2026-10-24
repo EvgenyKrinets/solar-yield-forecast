@@ -12,9 +12,9 @@ from .coordinator import SolarYieldCoordinator
 
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/api/{DOMAIN}/solar-comparison-card.js"
-FRONTEND_VERSION = "1.3.0"
+FRONTEND_VERSION = "1.3.1"
 PANEL_URL = "solar-yield-forecast"
-PANEL_TAG = "solar-yield-forecast-panel-v1-3-0"
+PANEL_TAG = "solar-yield-forecast-panel-v1-3-1"
 
 
 async def _async_reload_entry(hass, entry):

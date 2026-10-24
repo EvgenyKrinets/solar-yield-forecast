@@ -89,7 +89,25 @@ def test_today_live_scale_does_not_change_tomorrow():
     rows=[{'end':(now+timedelta(hours=1)).timestamp(),'kw':10,'cloud_cover':10},
           {'end':(now+timedelta(days=1,hours=1)).timestamp(),'kw':10,'cloud_cover':80}]
     result=forecast_summary(rows,1,None,now,today_scale=1.08)
-    assert result['today']==10.8
+    # With no measured daily-energy state, Today remains the complete baseline
+    # model. The live correction is visible in current power and, once actual
+    # energy exists, only in the remaining part of Today.
+    assert result['today']==10
     assert result['tomorrow']==10
+    assert result['model_today']==10
+    assert result['power_profile_today'][0]['power_w']==10000
+    assert result['current_kw']==10.8
+    assert result['live_scale_scope']=='remaining_today_only'
     assert result['daily'][0]['weather_mode']=='clear'
     assert result['daily'][1]['weather_mode']=='cloudy'
+
+
+def test_today_live_scale_changes_only_remaining_energy_when_actual_exists():
+    now=datetime(2026,10,24,8,tzinfo=TZ)
+    rows=[{'end':(now+timedelta(hours=1)).timestamp(),'kw':10}]
+    result=forecast_summary(rows,1,4,now,today_scale=.86)
+    assert result['model_today']==10
+    assert result['remaining_today']==8.6
+    assert result['today']==12.6
+    assert result['power_profile_today'][0]['power_w']==10000
+    assert result['current_kw']==8.6

@@ -1,3 +1,19 @@
+## 1.3.1 — Validated profile activation and scoped live correction
+
+- Accept a short-history installation profile when two held-out days show at
+  least a 5% whole-day WAPE improvement and the independently measured peak
+  error does not worsen. This activates useful borderline candidates such as
+  12.90% → 11.67% WAPE instead of silently retaining the generic curve.
+- Keep the complete daily power curve as the weather-and-history forecast.
+  A live correction derived from the latest 90 minutes now affects only the
+  remaining energy and current-power estimate; it can no longer lower an
+  already elapsed midday peak from an evening measurement.
+- Calculate live comparison samples with the same daily shape normalization
+  used by the displayed forecast and discard today's obsolete comparisons
+  when a newly validated profile is activated.
+- Add diagnostics describing the validation thresholds and the live
+  correction scope.
+
 ## 1.3.0 — Country and city location search
 
 - Replace mandatory coordinate entry during initial setup with a translated
