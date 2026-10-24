@@ -17,7 +17,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.core import callback
 from .const import (CONF_PANEL_GROUPS, CONF_TIME_ZONE, DOMAIN, PANEL_GROUPS, API_ARCHIVE, API_ENSEMBLE, API_FORECAST, DEFAULT_DAILY_SENSOR, DEFAULT_DC_SENSOR, TIMEZONE)
-from .model import (combine_weather, calibration, forecast_summary, open_meteo_azimuth, merge_quarter_hourly)
+from .model import (combine_weather, calibration, forecast_summary, open_meteo_azimuth, merge_quarter_hourly, recent_live_scale)
 _LOGGER = logging.getLogger(__name__)
 
 class SolarYieldCoordinator(DataUpdateCoordinator):
@@ -78,7 +78,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         params = {
             "latitude": self.config[CONF_LATITUDE],
             "longitude": self.config[CONF_LONGITUDE],
-            "hourly": "global_tilted_irradiance,temperature_2m,wind_speed_10m",
+            "hourly": "global_tilted_irradiance,temperature_2m,wind_speed_10m,cloud_cover,direct_radiation,diffuse_radiation,shortwave_radiation",
             "tilt": group["tilt"],
             "azimuth": open_meteo_azimuth(group["azimuth"]),
             "timezone": self.time_zone,
@@ -240,9 +240,10 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
 
     def _build_data(self):
         now = datetime.now(timezone.utc)
+        live_scale, live_samples = recent_live_scale(self.live_comparisons, now, self.tz)
         result = forecast_summary(
             self._combined_forecast_rows(), self.factor, self._actual_today(now), now,
-            self.shape_factors, tz=self.tz,
+            self.shape_factors, tz=self.tz, today_scale=live_scale,
         )
         result.update({
             "factor_percent": round(self.factor * 100, 1),
@@ -252,6 +253,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "actual_today": self._actual_today(now),
             "shape_calibration": self.shape_report,
             "shape_factors_utc": self.shape_factors,
+            "live_correction_samples": live_samples,
             "site": {
                 "name": self.config.get("site_name", self.entry.title),
                 "latitude": self.config.get(CONF_LATITUDE),
