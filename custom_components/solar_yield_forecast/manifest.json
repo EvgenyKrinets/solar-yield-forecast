@@ -1,7 +1,7 @@
 {
   "domain": "solar_yield_forecast",
   "name": "Solar Yield Forecast",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "documentation": "https://github.com/EvgenyKrinets/solar-yield-forecast",
   "config_flow": true,
   "iot_class": "cloud_polling",
