@@ -1,3 +1,10 @@
+## 1.0.3 — Settings form selector fix
+
+The site form now uses Home Assistant-compatible coordinate precision and no
+longer passes an empty unit to number selectors. This fixes the remaining
+`400: Bad Request` before the settings wizard was displayed and also allows
+the panel-group step to open normally.
+
 ## 1.0.2 — Configure-button compatibility fix
 
 The options wizard now uses Home Assistant's current options-flow lifecycle.
