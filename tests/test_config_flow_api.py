@@ -71,15 +71,16 @@ def test_number_selectors_use_home_assistant_compatible_configuration() -> None:
     assert 'if unit is not None:' in source
 
 
-def test_country_city_search_uses_native_selector_and_keeps_manual_fallback() -> None:
+def test_home_assistant_location_is_default_and_manual_fallback_remains() -> None:
     source = CONFIG_FLOW.read_text(encoding="utf-8")
 
-    assert "selector.CountrySelector(" in source
-    assert "API_GEOCODING" in source
-    assert '"countryCode": str(country_code).upper()' in source
-    assert "async_step_location" in source
+    assert "selector.CountrySelector(" not in source
+    assert "API_GEOCODING" not in source
+    assert "_site_from_home" in source
+    assert "hass.config.latitude" in source
+    assert "hass.config.longitude" in source
+    assert "_home_placeholders" in source
     assert "async_step_manual" in source
-    assert "normalized_locations(payload)" in source
-    assert "_location_selection_schema" in source
+    assert "CONF_MANUAL_COORDINATES" in source
     assert 'step_id="user"' in source
     assert 'step_id="init"' in source

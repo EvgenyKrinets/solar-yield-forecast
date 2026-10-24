@@ -449,7 +449,7 @@ class SolarComparisonCompactCard extends SolarComparisonCard {
 }
 if(!customElements.get('solar-comparison-compact')) customElements.define('solar-comparison-compact', SolarComparisonCompactCard);
 
-const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-4-0';
+const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-4-1';
 const SOLAR_MANAGED_DASHBOARD='solar-yield-forecast-dashboard';
 
 function solarPanelCardConfig(config={}) {
@@ -486,17 +486,37 @@ class SolarYieldForecastPanel extends HTMLElement {
     this.attachShadow({mode:'open'});
     this.shadowRoot.innerHTML=`<style>
       :host{display:block;min-height:100%;box-sizing:border-box;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121)}
+      header{max-width:1280px;margin:0 auto;padding:14px 20px 0;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box}
+      header strong{font-size:20px;line-height:40px}
+      .settings{border:0;border-radius:20px;background:var(--secondary-background-color,#eee);color:var(--primary-text-color,#212121);height:40px;padding:0 16px;display:flex;align-items:center;gap:8px;font:inherit;cursor:pointer}
+      .settings:hover{background:var(--divider-color,#ddd)}
+      .settings[hidden]{display:none}
       main{max-width:1280px;margin:0 auto;padding:20px;box-sizing:border-box}
-      @media(max-width:600px){main{padding:8px}}
-    </style><main></main>`;
+      @media(max-width:600px){header{padding:8px 8px 0}header strong{font-size:17px}.settings{width:40px;padding:0;justify-content:center}.settings span{display:none}main{padding:8px}}
+    </style><header><strong></strong><button class="settings" type="button"><ha-icon icon="mdi:cog"></ha-icon><span></span></button></header><main></main>`;
+    this.shadowRoot.querySelector('.settings').addEventListener('click',()=>this._openSettings());
   }
   set panel(value){this._panel=value;this._sync();}
   get panel(){return this._panel;}
   set hass(value){this._hass=value;this._sync();}
   get hass(){return this._hass;}
   _config(){return this._panel?.config||{};}
+  _settingsLabel(){
+    const language=String(this._hass?.language||'en').toLowerCase();
+    return language.startsWith('ru')?'Настройки':language.startsWith('he')?'הגדרות':'Settings';
+  }
+  _openSettings(){
+    history.pushState(null,'','/config/integrations/integration/solar_yield_forecast');
+    window.dispatchEvent(new Event('location-changed'));
+  }
   _sync(){
     if(!this._hass)return;
+    const label=this._settingsLabel();
+    this.shadowRoot.querySelector('header strong').textContent=this._config().title||'Solar Yield Forecast';
+    const settings=this.shadowRoot.querySelector('.settings');
+    settings.hidden=!this._hass.user?.is_admin;
+    settings.title=label;settings.setAttribute('aria-label',label);
+    settings.querySelector('span').textContent=label;
     const config=solarPanelCardConfig(this._config());
     const signature=JSON.stringify(config);
     if(!this._card){
