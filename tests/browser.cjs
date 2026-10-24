@@ -96,5 +96,24 @@ const assert=require('node:assert/strict');
  await page.locator('solar-comparison-card').evaluate(c=>{c._view=[8.389241211,17.6205801];c._render();});
  const labels=await page.locator('svg text').allTextContents();
  assert.ok(labels.filter(t=>t.includes(':')).every(t=>/^\d{2}:\d{2}$/.test(t)));
+ await page.evaluate(()=>{
+   window.panelMessages=[];
+   const panel=document.createElement('solar-yield-forecast-panel-v1-2-0');
+   panel.panel={config:{title:'Configured roof',pv_entity:'sensor.real_pv',energy_entity:'sensor.real_energy',forecast_entity:'sensor.real_profile',day_forecast_entity:'sensor.real_today',time_zone:'Asia/Jerusalem'}};
+   panel.hass={...window.fixture,user:{is_admin:true},states:{...window.fixture.states,
+     'sensor.real_pv':window.fixture.states['sensor.total_dc_power'],
+     'sensor.real_profile':window.fixture.states['sensor.solar_yield_forecast_power_profile_today'],
+     'sensor.real_today':window.fixture.states['sensor.solar_yield_forecast_today']},
+     connection:{sendMessagePromise:async message=>{window.panelMessages.push(message);return message.type==='lovelace/dashboards/list'?[]:{}}}};
+   document.body.append(panel);window.panelFixture=panel;
+ });
+ await page.waitForFunction(()=>window.panelMessages.some(message=>message.type==='lovelace/config/save'));
+ const managed=await page.evaluate(()=>{
+   const card=window.panelFixture.shadowRoot.querySelector('solar-comparison-card');
+   const saved=window.panelMessages.find(message=>message.type==='lovelace/config/save');
+   return {pv:card.config.pv_entity,energy:card.config.energy_entity,views:saved.config.views,created:window.panelMessages.some(message=>message.type==='lovelace/dashboards/create')};
+ });
+ assert.equal(managed.pv,'sensor.real_pv');assert.equal(managed.energy,'sensor.real_energy');
+ assert.ok(managed.created);assert.ok(Array.isArray(managed.views));assert.equal(managed.views[0].cards.length,1);
  assert.deepEqual(errors,[]);await browser.close();console.log('Browser: curves, readable fonts, responsive bars, hover, compact, invalid timestamps, refresh failure passed');
 })().catch(e=>{console.error(e);process.exit(1)});

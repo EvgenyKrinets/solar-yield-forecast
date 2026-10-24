@@ -295,7 +295,7 @@ class SolarComparisonCard extends HTMLElement {
       ${this._loading?'<div class="small">Загрузка истории…</div>':''}
       <div class="forecast-head"><h3 class="more">Прогноз выработки на ${this._forecastRange===30?'30':'8'} дней <span class="unit">· кВт·ч</span></h3><div class="forecast-range"><button data-forecast-range="8" aria-pressed="${this._forecastRange!==30}">8 дней</button><button data-forecast-range="30" aria-pressed="${this._forecastRange===30}">Месяц</button></div></div>
       <div class="bars ${this._forecastRange===30?'month':''}">${days.map(d=>`<div class="day ${d.source==='ensemble'?'ensemble':''}" title="${d.source==='ensemble'?'Дальний ансамблевый прогноз — точность ниже':'Основной прогноз погоды'}"><b>${esc(d.kwh)} </b><div class="bar" style="height:${Math.max(2,100*(Number(d.kwh)||0)/max)}px"></div><span>${esc((d.date||'').slice(5))}</span></div>`).join('')}</div>
-      <p class="small">Разведите два пальца для увеличения графика дня; после увеличения перемещайте его пальцем. Двойное нажатие сбрасывает масштаб. Мощность усреднена за 15 минут. ${this.config.smooth!==false?'Линии сглажены; значения в подсказках и энергия рассчитаны по исходным точкам. ':''}Пунктир обозначает короткий пропуск измерений, а не измеренную мощность; энергия за пропуск не вычисляется. Полосатые столбцы после основного горизонта — менее точный ансамблевый прогноз GFS.</p>
+      <p class="small">Разведите два пальца для увеличения графика дня; после увеличения перемещайте его пальцем. Двойное нажатие сбрасывает масштаб. Мощность усреднена за 15 минут. ${this.config.smooth!==false?'Линии сглажены; значения в подсказках и энергия рассчитаны по исходным точкам. ':''}Технические пропуски до 10 минут линейно восстанавливаются между соседними измерениями; более длинные пропуски остаются пустыми. Полосатые столбцы после основного горизонта — менее точный ансамблевый прогноз GFS.</p>
       ${this._error?'<p class="small">История: '+esc(this._error)+'</p>':''}
       </ha-card>`;
     solarPatch(this._root,template.content);
@@ -438,8 +438,8 @@ class SolarComparisonCard extends HTMLElement {
 }
 if(!customElements.get('solar-comparison-card'))customElements.define('solar-comparison-card',SolarComparisonCard);
 window.customCards=window.customCards||[];
-window.customCards.push({type:'solar-comparison-card',name:'Solar Comparison — широкий',description:'На всю ширину секции, три кривые и прогноз до 30 дней',preview:true,documentationURL:'https://github.com/EvgenyKrinets/solar-yield-forecast'});
-window.customCards.push({type:'solar-comparison-compact',name:'Solar Comparison — компактный',description:'Компактный график для обычной колонки',preview:true});
+if(!window.customCards.some(card=>card.type==='solar-comparison-card'))window.customCards.push({type:'solar-comparison-card',name:'Solar Comparison — широкий',description:'На всю ширину секции, три кривые и прогноз до 30 дней',preview:true,documentationURL:'https://github.com/EvgenyKrinets/solar-yield-forecast'});
+if(!window.customCards.some(card=>card.type==='solar-comparison-compact'))window.customCards.push({type:'solar-comparison-compact',name:'Solar Comparison — компактный',description:'Компактный график для обычной колонки',preview:true});
 
 class SolarComparisonCompactCard extends SolarComparisonCard {
   static getStubConfig() { return {size:'compact'}; }
@@ -448,3 +448,106 @@ class SolarComparisonCompactCard extends SolarComparisonCard {
   }
 }
 if(!customElements.get('solar-comparison-compact')) customElements.define('solar-comparison-compact', SolarComparisonCompactCard);
+
+const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-2-0';
+const SOLAR_MANAGED_DASHBOARD='solar-yield-forecast-dashboard';
+
+function solarPanelCardConfig(config={}) {
+  return {
+    type:'custom:solar-comparison-card',
+    title:config.title||'Solar Yield Forecast',
+    pv_entity:config.pv_entity||'sensor.total_dc_power',
+    forecast_entity:config.forecast_entity||'sensor.solar_yield_forecast_power_profile_today',
+    day_forecast_entity:config.day_forecast_entity||'sensor.solar_yield_forecast_today',
+    energy_entity:config.energy_entity||'sensor.daily_pv_generation',
+    time_zone:config.time_zone,
+    size:'wide',
+    smooth:true,
+    solar_yield_forecast_managed:true
+  };
+}
+
+function solarManagedDashboardConfig(config={}) {
+  return {
+    title:'Solar Yield Forecast',
+    views:[{
+      title:'Solar Yield Forecast',
+      path:'overview',
+      icon:'mdi:solar-power-variant',
+      type:'panel',
+      cards:[solarPanelCardConfig(config)]
+    }]
+  };
+}
+
+class SolarYieldForecastPanel extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({mode:'open'});
+    this.shadowRoot.innerHTML=`<style>
+      :host{display:block;min-height:100%;box-sizing:border-box;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121)}
+      main{max-width:1280px;margin:0 auto;padding:20px;box-sizing:border-box}
+      @media(max-width:600px){main{padding:8px}}
+    </style><main></main>`;
+  }
+  set panel(value){this._panel=value;this._sync();}
+  get panel(){return this._panel;}
+  set hass(value){this._hass=value;this._sync();}
+  get hass(){return this._hass;}
+  _config(){return this._panel?.config||{};}
+  _sync(){
+    if(!this._hass)return;
+    const config=solarPanelCardConfig(this._config());
+    const signature=JSON.stringify(config);
+    if(!this._card){
+      this._card=document.createElement('solar-comparison-card');
+      this._card.setConfig(config);
+      this.shadowRoot.querySelector('main').append(this._card);
+      this._signature=signature;
+    }else if(this._signature!==signature){
+      this._card.setConfig(config);this._signature=signature;
+    }
+    this._card.hass=this._hass;
+    if(!this._dashboardStarted){
+      this._dashboardStarted=true;
+      this._ensureManagedDashboard().catch(error=>console.warn('Solar Yield Forecast: dashboard setup failed',error));
+    }
+  }
+  async _ensureManagedDashboard(){
+    if(!this._hass?.user?.is_admin)return;
+    const raw=await this._hass.connection.sendMessagePromise({type:'lovelace/dashboards/list'});
+    const dashboards=Array.isArray(raw)?raw:(raw?.dashboards||[]);
+    const managed=solarManagedDashboardConfig(this._config());
+    const existing=dashboards.find(item=>item.url_path===SOLAR_MANAGED_DASHBOARD);
+    if(!existing){
+      await this._hass.connection.sendMessagePromise({
+        type:'lovelace/dashboards/create',
+        url_path:SOLAR_MANAGED_DASHBOARD,
+        title:'Solar Yield Forecast',
+        icon:'mdi:solar-power-variant',
+        show_in_sidebar:false,
+        require_admin:false
+      });
+      await this._hass.connection.sendMessagePromise({
+        type:'lovelace/config/save',url_path:SOLAR_MANAGED_DASHBOARD,config:managed
+      });
+      return;
+    }
+    try{
+      const current=await this._hass.connection.sendMessagePromise({
+        type:'lovelace/config',url_path:SOLAR_MANAGED_DASHBOARD
+      });
+      const card=current?.views?.[0]?.cards?.[0];
+      if(!Array.isArray(current?.views)||card?.solar_yield_forecast_managed===true){
+        await this._hass.connection.sendMessagePromise({
+          type:'lovelace/config/save',url_path:SOLAR_MANAGED_DASHBOARD,config:managed
+        });
+      }
+    }catch(_){
+      await this._hass.connection.sendMessagePromise({
+        type:'lovelace/config/save',url_path:SOLAR_MANAGED_DASHBOARD,config:managed
+      });
+    }
+  }
+}
+if(!customElements.get(SOLAR_PANEL_TAG))customElements.define(SOLAR_PANEL_TAG,SolarYieldForecastPanel);

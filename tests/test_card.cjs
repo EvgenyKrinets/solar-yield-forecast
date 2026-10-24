@@ -98,3 +98,17 @@ test('fractional zoom ticks are short HH:mm labels',()=>{
  assert.equal(ctx.solarTimeLabel(8.5),'08:30');
  assert.equal(ctx.solarTimeLabel(23.999999),'24:00');
 });
+
+test('managed dashboard always contains a valid views array and exact entities',()=>{
+ const config=ctx.solarManagedDashboardConfig({
+   title:'Roof',pv_entity:'sensor.real_pv',energy_entity:'sensor.real_energy',
+   forecast_entity:'sensor.profile',day_forecast_entity:'sensor.today',time_zone:'Asia/Jerusalem'
+ });
+ assert.ok(Array.isArray(config.views));assert.equal(config.views.length,1);
+ assert.equal(config.views[0].type,'panel');assert.equal(config.views[0].cards.length,1);
+ const card=config.views[0].cards[0];
+ assert.equal(card.type,'custom:solar-comparison-card');
+ assert.equal(card.pv_entity,'sensor.real_pv');assert.equal(card.energy_entity,'sensor.real_energy');
+ assert.equal(card.forecast_entity,'sensor.profile');assert.equal(card.day_forecast_entity,'sensor.today');
+ assert.equal(card.solar_yield_forecast_managed,true);
+});
