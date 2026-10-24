@@ -67,9 +67,9 @@ forecast power = physical PV estimate × daily calibration × learned shape × b
 ```
 
 - **Physical estimate:** tilted irradiance for every configured panel group, temperature and wind.
-- **Daily calibration:** robust median comparison between historical modeled and measured energy.
-- **Learned shape:** validated profile from clear, complete production days; cloudy days cannot carve false dips into it.
-- **Live correction:** today's remaining forecast can adjust from the latest 90 minutes of measured PV power, bounded to ±8%.
+- **Daily calibration:** robust median comparison between historical modeled and measured energy; it controls total kWh, not peak height by itself.
+- **Learned shape:** a persisted, validated profile from clear, complete production days redistributes those kWh across the day; cloudy days cannot carve false dips into it.
+- **Live correction:** today's remaining forecast adapts gradually from the latest 90 minutes of measured PV power and may reach ±20% after eight consistent samples.
 - **Weather continuity:** cloud and irradiance effects are never switched off.
 
 ## Features

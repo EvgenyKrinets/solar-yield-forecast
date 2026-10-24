@@ -113,6 +113,35 @@ def hourly_power_profile(hourly, tz=TZ):
 def peak_kw_of_profile(profile):
     return round(max((p["power_w"] for p in profile), default=0) / 1000.0, 2)
 
+
+def daily_shape_normalizers(forecast_rows, shape, tz=TZ):
+    """Return energy-weighted shape means for every local forecast day.
+
+    The historical shape describes *when* a site makes its energy.  It must not
+    also change *how much* energy the independent daily calibration predicts.
+    Dividing every interval by its day's weighted mean preserves the modeled
+    kWh while allowing the real profile to become narrower/taller or
+    wider/flatter.
+    """
+    if not shape:
+        return {}
+    totals = {}
+    for row in forecast_rows:
+        seconds = row.get("interval_seconds", 3600)
+        start = int(row["end"]) - seconds
+        date = day_of_hour(row["end"], seconds, tz)
+        weight = max(0.0, _number(row.get("kw"))) * seconds / 3600
+        if weight <= 0:
+            continue
+        raw, shaped = totals.setdefault(date, [0.0, 0.0])
+        totals[date][0] = raw + weight
+        totals[date][1] = shaped + weight * interval_shape(start, seconds, shape)
+    return {
+        date: shaped / raw
+        for date, (raw, shaped) in totals.items()
+        if raw > 0 and shaped > 0
+    }
+
 def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forecast_days=30, tz=TZ, today_scale=1.0):
     today = now.astimezone(tz).date()
     today_iso = today.isoformat()
@@ -126,6 +155,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
     cloud_by_day = {d: [0.0, 0.0] for d in days}
     now_ts = now.timestamp()
     current_interval_found = False
+    shape_normalizers = daily_shape_normalizers(forecast_rows, shape or {}, tz)
     for row in forecast_rows:
         date = day_of_hour(row["end"], row.get("interval_seconds", 3600), tz)
         if date not in sums:
@@ -135,7 +165,9 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         start = end - seconds
         duration_hours = seconds / 3600
         live_scale = today_scale if date == today_iso else 1.0
-        calibrated_kw = max(0, row["kw"] * factor * interval_shape(start, seconds, shape or {}) * live_scale)
+        shape_value = interval_shape(start, seconds, shape or {})
+        shape_mean = shape_normalizers.get(date, 1.0)
+        calibrated_kw = max(0, row["kw"] * factor * shape_value / shape_mean * live_scale)
         sources_by_day[date].add(row.get("forecast_source", "weather"))
         cloud = _number(row.get("cloud_cover"), None)
         if cloud is not None and row["kw"] > 0.1:
@@ -189,11 +221,19 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         "forecast_date_today": today_iso,
         "forecast_date_tomorrow": days[1],
         "live_scale_percent": round(today_scale * 100, 1),
+        "shape_energy_normalizers": {
+            day: round(value, 5) for day, value in shape_normalizers.items()
+        },
     }
 
 
 def recent_live_scale(comparisons, now, tz=TZ, minutes=90):
-    """Return a conservative same-day nowcast correction from recent PV data."""
+    """Return a confidence-weighted same-day correction from recent PV data.
+
+    Four samples start the correction gently.  Eight or more consistent
+    five-minute observations may correct up to 20%, enough to recover a clear
+    systematic height error without reacting fully to one brief cloud.
+    """
     cutoff = now.timestamp() - minutes * 60
     today = now.astimezone(tz).date()
     ratios = []
@@ -211,9 +251,9 @@ def recent_live_scale(comparisons, now, tz=TZ, minutes=90):
             ratios.append(ratio)
     if len(ratios) < 4:
         return 1.0, len(ratios)
-    # Live measurements refine the weather forecast but cannot make the
-    # remaining day jump wildly after a short cloud or sensor transient.
-    return max(0.92, min(1.08, median(ratios))), len(ratios)
+    target = max(0.80, min(1.20, median(ratios)))
+    confidence = min(1.0, (len(ratios) - 3) / 5)
+    return round(1.0 + (target - 1.0) * confidence, 5), len(ratios)
 
 
 def merge_quarter_hourly(hourly, quarters):
