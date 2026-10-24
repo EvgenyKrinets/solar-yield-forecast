@@ -31,13 +31,15 @@ from .const import (
 
 
 def _number(minimum, maximum, step=1, unit=None):
-    return selector.NumberSelector(selector.NumberSelectorConfig(
+    config = selector.NumberSelectorConfig(
         min=minimum,
         max=maximum,
         step=step,
         mode=selector.NumberSelectorMode.BOX,
-        unit_of_measurement=unit,
-    ))
+    )
+    if unit is not None:
+        config["unit_of_measurement"] = unit
+    return selector.NumberSelector(config)
 
 
 def _site_schema(hass, values):
@@ -48,8 +50,8 @@ def _site_schema(hass, values):
     time_zone = values.get(CONF_TIME_ZONE, getattr(hass.config, "time_zone", TIMEZONE))
     return vol.Schema({
         vol.Required(CONF_SITE_NAME, default=location_name): selector.TextSelector(),
-        vol.Required(CONF_LATITUDE, default=latitude): _number(-90, 90, 0.00001, "°"),
-        vol.Required(CONF_LONGITUDE, default=longitude): _number(-180, 180, 0.00001, "°"),
+        vol.Required(CONF_LATITUDE, default=latitude): _number(-90, 90, "any", "°"),
+        vol.Required(CONF_LONGITUDE, default=longitude): _number(-180, 180, "any", "°"),
         vol.Required(CONF_TIME_ZONE, default=time_zone): selector.TextSelector(),
         vol.Required("daily_sensor", default=values.get("daily_sensor", DEFAULT_DAILY_SENSOR)):
             selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
