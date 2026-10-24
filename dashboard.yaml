@@ -1,15 +1,16 @@
-type: custom:solar-comparison-card
-title: Солнечные панели — вчера / сегодня / прогноз
-pv_entity: sensor.total_dc_power
-forecast_entity: sensor.solar_yield_forecast_power_profile_today
-energy_entity: sensor.daily_pv_generation
-day_forecast_entity: sensor.solar_yield_forecast_today
-grid_options:
-  columns: full
-  rows: 8
-
-# Compact alternative:
-# type: custom:solar-comparison-compact
-# grid_options:
-#   columns: 6
-#   rows: 6
+title: Solar Yield Forecast
+views:
+  - title: Solar Yield Forecast
+    path: overview
+    icon: mdi:solar-power-variant
+    type: panel
+    cards:
+      - type: custom:solar-comparison-card
+        title: Solar Yield Forecast
+        pv_entity: sensor.total_dc_power
+        forecast_entity: sensor.solar_yield_forecast_power_profile_today
+        energy_entity: sensor.daily_pv_generation
+        day_forecast_entity: sensor.solar_yield_forecast_today
+        grid_options:
+          columns: full
+          rows: 8

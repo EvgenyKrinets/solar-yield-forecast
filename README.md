@@ -115,6 +115,8 @@ forecast power = physical PV estimate × daily calibration × learned shape × b
 5. Install **Solar Yield Forecast**.
 6. Restart Home Assistant.
 7. Open **Settings → Devices & services → Add integration → Solar Yield Forecast**.
+8. Complete the site and panel-group wizard, then open **Solar Forecast** from
+   the Home Assistant sidebar. No manual dashboard YAML is required.
 
 Or use the **Open in HACS** button at the top of this page.
 
@@ -160,7 +162,16 @@ Panels with the same wattage, tilt and azimuth belong in one group. Open **Setti
 
 ## Dashboard
 
-The frontend card is bundled and registered automatically after Home Assistant restarts. Add either:
+The integration automatically registers **Solar Forecast** as a dedicated
+sidebar application. It uses the production and energy entities selected in the
+setup wizard, so a new user does not need to find or configure the card.
+
+When an administrator opens the sidebar application for the first time, the
+integration also creates a valid managed **Solar Yield Forecast** dashboard in
+Home Assistant's dashboard registry. That dashboard is hidden from the sidebar
+because the dedicated application already occupies one sidebar entry.
+
+The frontend card remains bundled for optional use on other dashboards. Add either:
 
 - **Solar Comparison — Wide** (`custom:solar-comparison-card`)
 - **Solar Comparison — Compact** (`custom:solar-comparison-compact`)
@@ -233,6 +244,7 @@ Read [FORECAST_ACCURACY.md](FORECAST_ACCURACY.md) for diagnostic details.
 |---|---|
 | Integration is not listed | Restart Home Assistant after installation and clear the integration search |
 | Card is missing | Restart Home Assistant and hard-refresh the browser/app |
+| Dashboard reports that `views` is undefined | Update to the latest release, restart HA and open **Solar Forecast** once as an administrator |
 | Old card still appears | Remove the manually registered `/local/solar-comparison-card.js` resource |
 | Historical curve has gaps | Check Recorder retention and source sensor availability |
 | Learned profile is inactive | Inspect `shape_calibration` on the `Today` sensor |

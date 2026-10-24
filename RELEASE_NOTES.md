@@ -1,3 +1,20 @@
+## 1.2.0 — One-click dashboard and sidebar application
+
+- Register a dedicated **Solar Forecast** application in the Home Assistant
+  sidebar after the integration setup wizard finishes.
+- Open the complete interactive forecast interface without manually creating a
+  Lovelace card or editing YAML.
+- Automatically create a valid managed Lovelace dashboard, including its
+  required `views` array, the first time an administrator opens the sidebar
+  application. The dashboard is available under Home Assistant Dashboards but
+  is hidden from the sidebar to avoid a duplicate menu item.
+- Use the exact production and energy sensors selected during setup, plus the
+  actual entity IDs created for this config entry.
+- Repair an empty or invalid previously managed dashboard instead of showing
+  `Expected an array value at views`.
+- Preserve manual card support for users who also want the forecast on another
+  dashboard.
+
 ## 1.1.1 — Short Recorder gap recovery
 
 - Linearly interpolate brief `unknown` or `unavailable` PV power gaps lasting
