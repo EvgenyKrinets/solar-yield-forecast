@@ -1,167 +1,279 @@
-## 1.1.0 — Real-profile weather forecast
+<div align="center">
 
-Power curves now learn the installation's repeatable shape from provider-confirmed clear historical days. Open-Meteo GTI, cloud cover, direct/diffuse radiation, temperature and wind remain active for every interval; weather is multiplied by the learned local profile instead of being replaced by it. Cloudy days are excluded from profile training, but they still reduce the forecast normally.
+![Solar Yield Forecast hero](assets/solar-yield-forecast-hero.webp)
 
-The clear-day profile can use five recent complete days, has enough freedom to match broad multi-orientation morning/peak/evening bias, and is validated on held-out clear days. Today's remaining forecast also receives a bounded ±8% correction from the latest 90 minutes of real PV power. Diagnostics expose selected clear days, weather mode, cloud cover and live-correction support.
+# Solar Yield Forecast
 
-## 1.0.4 — HACS download compatibility
+### Adaptive, weather-aware PV production forecasting for Home Assistant
 
-HACS now installs the integration from GitHub's standard tagged source archive
-instead of a custom release asset. This avoids an `aiohttp` header-size failure
-that could prevent Home Assistant from downloading 1.0.3 even though its ZIP
-file was valid. Integration settings and stored production history are unchanged.
+[![Latest release](https://img.shields.io/github/v/release/EvgenyKrinets/solar-yield-forecast?style=for-the-badge&color=16a085)](https://github.com/EvgenyKrinets/solar-yield-forecast/releases/latest)
+[![Home Assistant 2025.1+](https://img.shields.io/badge/Home%20Assistant-2025.1%2B-18BCF2?style=for-the-badge&logo=home-assistant&logoColor=white)](https://www.home-assistant.io/)
+[![HACS custom](https://img.shields.io/badge/HACS-Custom-41BDF5?style=for-the-badge&logo=home-assistant-community-store&logoColor=white)](https://hacs.xyz/)
+[![License MIT](https://img.shields.io/github/license/EvgenyKrinets/solar-yield-forecast?style=for-the-badge&color=6f42c1)](LICENSE)
 
-## 1.0.3 — Settings form selector fix
+[![Validate integration](https://github.com/EvgenyKrinets/solar-yield-forecast/actions/workflows/validate.yml/badge.svg)](https://github.com/EvgenyKrinets/solar-yield-forecast/actions/workflows/validate.yml)
+[![GitHub stars](https://img.shields.io/github/stars/EvgenyKrinets/solar-yield-forecast?style=flat)](https://github.com/EvgenyKrinets/solar-yield-forecast/stargazers)
+[![Open issues](https://img.shields.io/github/issues/EvgenyKrinets/solar-yield-forecast)](https://github.com/EvgenyKrinets/solar-yield-forecast/issues)
 
-The site form now uses Home Assistant-compatible coordinate precision and no
-longer passes an empty unit to number selectors. This fixes the remaining
-`400: Bad Request` before the settings wizard was displayed and also allows
-the panel-group step to open normally.
-
-## 1.0.2 — Configure-button compatibility fix
-
-The options wizard now uses Home Assistant's current options-flow lifecycle.
-This fixes the generic `400: Bad Request` shown when opening **Configure** on
-an existing installation. Saved panel groups, learned data and Recorder history
-are preserved.
-
-## 1.0.1 — Installed-capacity summary
-
-The panel wizard now ends with a review page. It shows every group as panel
-count × panel wattage = group kWp, followed by the total panel count and total
-installed system capacity. Nothing is saved until that summary is confirmed.
-
-## 1.0.0 — Configure any PV installation from the UI
-
-Solar Yield Forecast is no longer tied to one Dimona array. The installation
-wizard uses the Home Assistant location as its default and lets the user set a
-site/city name, coordinates, IANA time zone and production sensors. Add up to
-12 panel groups, each with its own panel count, panel wattage, tilt and azimuth.
-All settings can later be changed with **Settings → Devices & services → Solar
-Yield Forecast → Configure**; the entry reloads automatically and keeps its
-stored production history. Existing installations retain their original five
-groups until the owner chooses to edit them.
-
-## 0.9.1 — Short-history adaptive fallback
-
-The protected shape learner now also works with 7–18 complete Recorder days,
-using stricter validation than the full 30-day mode. Up to 5,000 five-minute
-power samples are retained privately in Home Assistant storage so learning can
-gradually outlive Recorder's purge window. Diagnostics expose the selected
-history mode and number of available days.
-
-## 0.9.0 — 30-day robust adaptation and monthly forecast
-
-Intraday calibration now uses 30 days of Recorder history, normalises daily
-amplitude before learning shape, smooths hourly corrections and validates the
-peak separately. This prevents a few cloudy or incomplete hours from creating
-an artificial midday notch. The regular Open-Meteo forecast covers the first
-16 days; the lower-confidence GFS ensemble mean extends the daily bars to 30
-days. Use **8 days / Month** below the chart. Long-range bars are striped.
-
-## 0.8.2 — Touch gesture continuity
-
-Keep the SVG and touch targets mounted during pinch updates. Use two-dimensional finger distance and rebase panning when one finger is lifted. Hide tooltips during gestures. Short missing history intervals are shown with explicitly labelled dashed guides; measured curves/fills and energy remain unchanged, and tooltips no longer borrow a neighbour's value inside a missing interval.
-
-## 0.8.1 — Mobile chart fixes
-
-Preserve card/controls and scroll position during updates, including expanded view. Format fractional zoom ticks as HH:mm. Interpolate learned hourly shape corrections continuously and integrate them consistently for power/energy; held-out validation now evaluates that same correction. Weather-driven changes remain visible.
-
-# Solar Yield Forecast — Home Assistant
-
-## 0.7.0 — intraday calibration / обучение формы
-
-The integration learns the intraday profile from local DC
-power history. Corrections are enabled only after improving a separate
-retrospective validation; insufficient data leaves
-the base forecast active. The hourly correction uses UTC to avoid DST shifts.
-It is combined with the existing daily calibration, and applied to interval
-energy as well as the power curve. Model Today exposes the modeled whole-day
-energy separately from Today (actual plus remaining).
-
-Поправки формы обучаются по истории DC-мощности автоматически. Статус,
-ошибки проверки и коэффициенты доступны в свойствах Today. Это проверка
-модели на прошлой погоде, а не обещание такой же точности на завтра.
-Для обновления установите 0.7.0 через HACS и перезапустите Home Assistant.
-
+**English** · [Русский](README_RU.md) · [Releases](RELEASE_NOTES.md) · [Forecast accuracy](FORECAST_ACCURACY.md)
 
 [![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=EvgenyKrinets&repository=solar-yield-forecast&category=integration)
 
-## 0.6.0
+</div>
 
-15-minute time-weighted analysis replaces sample-count averaging. Only fully covered, completed intervals are shown. Open-Meteo 15-minute forecasts are integrated as kW × 0.25 h, with hourly fallback for the remaining horizon. In Israel, the provider interpolates weather from hourly data; this is not a guarantee of 15-minute weather accuracy. See [release notes](RELEASE_NOTES.md).
+Solar Yield Forecast turns weather data and your own production history into an installation-specific solar forecast. It supports arbitrary locations, multiple panel orientations, local learning, interactive history and forecasts up to 30 days.
 
-Установка: нажмите **Open in HACS**, подтвердите добавление репозитория и скачайте интеграцию. Перезапустите Home Assistant и добавьте Solar Yield Forecast в Devices & services. Карточки устанавливаются автоматически: выберите широкую или компактную в редакторе нужного Dashboard. Первую установку и перезапуск подтверждает пользователь; интеграция не устанавливает HACS самостоятельно.
+The learning layer runs inside Home Assistant. It is adaptive statistical intelligence rather than a remote black-box AI service: your measured production history remains local, while only site coordinates and panel geometry are sent to Open-Meteo for weather and irradiance forecasts.
 
-В 0.6.0 фактическая мощность учитывает длительность показаний, пропуски не соединяются линией. Показываются завершённые 15-минутные интервалы. Новые данные прогноза используют длительность интервала при расчёте энергии. Погодная точность для Израиля ограничена интерполяцией Open-Meteo. Раздел о 0.5.0 ниже описывает предыдущую версию.
+## Why this integration?
 
+Generic PV calculators know panel capacity and sunlight, but they do not know your roof. Solar Yield Forecast learns the repeatable shape of the real installation—including orientation mix, broad shading, clipping and systematic morning/evening bias—then continuously applies forecast irradiance, cloud cover, temperature and wind.
 
-Custom Home Assistant integration for configurable multi-orientation PV systems using Open-Meteo irradiance.
+<table>
+<tr>
+<td width="33%" valign="top"><strong>☀️ Installation-specific</strong><br><br>Learns a validated power shape from complete, provider-confirmed clear days.</td>
+<td width="33%" valign="top"><strong>🌦️ Weather always active</strong><br><br>Open-Meteo GTI and atmospheric conditions modify every forecast interval.</td>
+<td width="33%" valign="top"><strong>🧠 Local adaptation</strong><br><br>Calibration, production history and learning samples stay in Home Assistant.</td>
+</tr>
+<tr>
+<td valign="top"><strong>🧭 Multi-orientation arrays</strong><br><br>Configure up to 12 panel groups with independent count, wattage, tilt and azimuth.</td>
+<td valign="top"><strong>📈 Interactive analytics</strong><br><br>Day, week, month, year and lifetime views with touch zoom and navigation.</td>
+<td valign="top"><strong>🔭 30-day outlook</strong><br><br>High-resolution near-term weather plus a lower-confidence ensemble extension.</td>
+</tr>
+</table>
 
-## Installation from HACS (custom repository)
+## Dashboard preview
 
-1. Add `https://github.com/EvgenyKrinets/solar-yield-forecast` as a **Custom repository → Integration**.
-2. Download Solar Yield Forecast, restart Home Assistant.
-3. Settings → Devices & services → Add integration → Solar Yield Forecast.
-4. Select the site, time zone and production sensors, then add each panel orientation. Azimuth is clockwise from north: 0° north, 90° east, 180° south and 270° west.
+<div align="center">
+<img src="assets/dashboard-mobile.webp" alt="Solar Yield Forecast Home Assistant dashboard" width="420">
+</div>
 
-### Dashboard
+The bundled Lovelace card compares the previous day, measured PV production and the forecast profile. It also provides 8-day and 30-day energy bars, calendar navigation, history drill-down, pinch zoom, pan and expanded view.
 
-The card is bundled and loaded automatically after restarting Home Assistant.
-Add **Solar Comparison — широкий** or **Solar Comparison — компактный** in
-the target dashboard's card picker. Remove any old manually registered
-`/local/solar-comparison-card.js` resource to prevent duplicate old code.
+## How it works
 
-### Accuracy
+```mermaid
+flowchart TD
+    A[Open-Meteo weather and irradiance] --> C[Hybrid forecast engine]
+    B[Local Recorder production history] --> C
+    C --> D[Validated installation profile × continuous weather]
+    D --> E[HA sensors and interactive dashboard]
+```
 
-See [diagnosis and alternative sources](FORECAST_ACCURACY.md). Forecast weather
-accuracy has not been validated against a private recorder export yet.
+For each interval, the integration combines:
 
-### Historical release notes
+```text
+forecast power = physical PV estimate × daily calibration × learned shape × bounded live correction
+```
 
-### New in 0.3.0
+- **Physical estimate:** tilted irradiance for every configured panel group, temperature and wind.
+- **Daily calibration:** robust median comparison between historical modeled and measured energy.
+- **Learned shape:** validated profile from clear, complete production days; cloudy days cannot carve false dips into it.
+- **Live correction:** today's remaining forecast can adjust from the latest 90 minutes of measured PV power, bounded to ±8%.
+- **Weather continuity:** cloud and irradiance effects are never switched off.
 
-- Saved day-ahead baseline predictions, never rewritten as the day progresses.
-- Separate forward forecast error metric once eligible full-day observations arrive; historical fit error remains separate.
-- Samples of actual instant Sungrow power versus forecast *hourly mean*. These are contextual diagnostics, **not** valid direct point-by-point errors.
-- A two-panel dashboard: yesterday/today/forecast and switchable 8/30 daily yield bars.
-- Existing entity IDs and .storage persisted energy/calibration retained.
+## Features
 
-**Important**: the built-in `daily_seed.json` is optional; do not publish private home energy histories. When upgrading from 0.2.0, leave this file in place on the local HA if you still need the old observations. Removing it may temporarily reduce calibration history. Do not delete your existing integration entry.
+- UI setup and reconfiguration—no YAML required for the integration itself.
+- Custom site name, latitude, longitude and IANA time zone.
+- Selectable daily-energy and live-PV-power sensors.
+- Up to 12 independent panel groups.
+- Automatic installed-capacity summary before saving.
+- 15-minute forecast profile where provider data is available, with safe hourly fallback.
+- Previous-day, current-day and forecast power curves.
+- Saved daily energy history without filling missing dates with fake zeros.
+- Today, tomorrow, 7-day and 30-day energy sensors.
+- Retrospective training diagnostics and separately tracked forward forecast error.
+- Automatic frontend registration of wide and compact Lovelace cards.
+- English and Russian setup translations.
+- DST-safe local calendar navigation.
 
-### Known limitations
+## Requirements
 
-- Open-Meteo 15-minute values in Israel are interpolated from hourly weather. Instantaneous inverter output naturally differs.
-- Days 17–30 use a coarse GFS ensemble mean and are scenario estimates, not precise local daily weather forecasts.
-- Forward accuracy requires future completed days and will initially be `unknown`.
-- Past daily values are recorded only if Home Assistant sensors update correctly. Continuous daylight clipping is not detected automatically.
-- Automated HACS installation requires a public GitHub repository; project files alone do not publish it.
-## Automatic card installation (v0.4.0)
+| Requirement | Minimum / notes |
+|---|---|
+| Home Assistant | `2025.1.0` or newer |
+| HACS | Recommended for installation and updates |
+| Internet | Required for Open-Meteo forecast requests |
+| Recorder | Strongly recommended for profile learning and historical charts |
+| Daily energy sensor | A monotonically increasing daily PV value in `kWh` |
+| Live PV power sensor | PV power in `W` or `kW` |
 
-The integration now bundles and automatically loads `solar-comparison-card` after Home Assistant restart. No manual JavaScript copy or Lovelace Resource registration is necessary. HACS installs the integration, then the user adds the card to the desired dashboard using [`dashboard.yaml`](./dashboard.yaml). Remove any older `/local/solar-comparison-card.js` resource to prevent an outdated duplicate from loading.
+## Installation
 
-For a card three standard columns wide, use a **Sections** dashboard: configure a 3-column section span, place the card in that section, and choose **Full width card**. The YAML sets `grid_options.columns: full`. Masonry dashboards cannot natively span a single card across three columns.
+### HACS custom repository
 
-## Two card sizes (v0.4.1)
+1. Open **HACS → Integrations**.
+2. Open the menu and choose **Custom repositories**.
+3. Add:
 
-The **Wide** card uses `custom:solar-comparison-card` and requests the whole available section width. The **Compact** card uses `custom:solar-comparison-compact` and requests six grid columns. In Sections dashboards, choose where to place each card and drag it to a desired section. A three-column section span allows the wide card to cover three standard columns. Both card types are auto-loaded by the integration; no separate frontend installation.
+   ```text
+   https://github.com/EvgenyKrinets/solar-yield-forecast
+   ```
 
-## v0.5.0 interactive plot and quarter-hour analysis
+4. Select category **Integration**.
+5. Install **Solar Yield Forecast**.
+6. Restart Home Assistant.
+7. Open **Settings → Devices & services → Add integration → Solar Yield Forecast**.
 
-Hover or touch the time plot for the previous-day, current-day, and forecast power values. Actual history is binned into 15-minute averages. The weather profile is interpolated to 15-minute display points from hourly radiation (not independent 15-minute weather predictions in Israel). Forecast refresh is scheduled every 15 minutes; raw daily energy is still integrated from the original hourly means. Restart HA after updating in HACS.
+Or use the **Open in HACS** button at the top of this page.
 
-## Smooth charts (0.7.1)
+### Manual installation
 
-Curves pass through the original 15-minute values without overshooting or bridging gaps. Smoothing only affects the drawing; tooltips and energy calculations retain the original data. Set `smooth: false` in the card YAML to use straight segments. Labels use the Home Assistant/system font; small cards show daily bars in two rows.
+Copy the directory:
 
-## 0.8.0 — Interactive history chart
+```text
+custom_components/solar_yield_forecast
+```
 
-- Day / Week / Month / Year / All-time tabs, calendar and previous/next period navigation.
-- Two-finger horizontal zoom, drag while zoomed, reset, Ctrl+wheel, expanded view.
-- Orange PV fill, blue previous-day curve, green forecast and series switches.
-- Historical daily curves load the selected day and preceding day from Recorder; unavailable history remains empty. Today/tomorrow profiles are shown only where available.
-- Energy views use the integration's saved daily totals. Missing days are not zero-filled; month/year totals can be partial. Click bars to drill down.
-- Israel calendar navigation respects DST. Fast navigation ignores stale history responses.
+to:
 
-Update through HACS after release, then restart Home Assistant. Recorder retention limits older power curves. Saved daily totals begin with the integration's available history; this update does not recover deleted Recorder data.
+```text
+/config/custom_components/solar_yield_forecast
+```
 
+Restart Home Assistant, then add the integration from **Devices & services**.
+
+## Configuration
+
+The setup wizard asks for:
+
+| Setting | Description |
+|---|---|
+| Site name | Friendly installation or city name |
+| Latitude / longitude | Defaults to the Home Assistant home location |
+| Time zone | IANA zone such as `Asia/Jerusalem` |
+| Daily production | Sensor that reports today's generated energy |
+| Live PV power | Sensor that reports current PV power |
+| Panel groups | Name, panel count, panel wattage, tilt and azimuth |
+
+Azimuth is clockwise from geographic north:
+
+| Direction | Azimuth |
+|---|---:|
+| North | `0°` |
+| East | `90°` |
+| South | `180°` |
+| West | `270°` |
+
+Panels with the same wattage, tilt and azimuth belong in one group. Open **Settings → Devices & services → Solar Yield Forecast → Configure** to change the site, sensors or array later. The entry reloads automatically and preserves its stored history.
+
+## Dashboard
+
+The frontend card is bundled and registered automatically after Home Assistant restarts. Add either:
+
+- **Solar Comparison — Wide** (`custom:solar-comparison-card`)
+- **Solar Comparison — Compact** (`custom:solar-comparison-compact`)
+
+Minimal YAML:
+
+```yaml
+type: custom:solar-comparison-card
+forecast_entity: sensor.solar_yield_forecast_power_profile_today
+day_forecast_entity: sensor.solar_yield_forecast_today
+```
+
+See [`dashboard.yaml`](dashboard.yaml) for the complete example. For a three-column layout, use a **Sections** dashboard and place the wide card in a section spanning three columns.
+
+If an older version was installed manually, remove `/local/solar-comparison-card.js` from Dashboard Resources to avoid loading duplicate frontend code.
+
+## Entities
+
+| Entity suffix | Unit | Purpose |
+|---|---:|---|
+| `model_today` | kWh | Whole-day modeled energy, independent of measured progress |
+| `today` | kWh | Measured energy so far plus forecast remaining today |
+| `tomorrow` | kWh | Tomorrow's forecast energy |
+| `next_7_days` | kWh | Forecast total for the next seven complete days |
+| `next_30_days` | kWh | Forecast total across the 30-day horizon |
+| `remaining_today` | kWh | Estimated energy still available today |
+| `power_now` | kW | Forecast mean power for the current interval |
+| `power_profile_today` | kW | Today's forecast curve and 15-minute display points |
+| `power_profile_tomorrow` | kW | Tomorrow's forecast curve |
+| `calibration_factor` | % | Historical daily-energy scale factor |
+| `calibration_samples` | days | Days used for daily calibration |
+| `training_error` | % | Retrospective in-sample model error |
+| `forward_error` | % | Error of saved day-ahead forecasts |
+| `forward_samples` | days | Completed forward-forecast samples |
+
+The `Today` sensor attributes also expose clear-day selection, learned shape factors, weather classification, live correction, saved baselines and site configuration.
+
+## Forecast horizon and confidence
+
+| Horizon | Source | Interpretation |
+|---|---|---|
+| Today–16 days | Open-Meteo regular forecast | Primary weather-aware estimate |
+| Days 17–30 | GFS ensemble mean | Lower-confidence planning estimate |
+| Historical profile | Local Recorder + stored samples | Installation-specific shape learning |
+
+Striped long-range bars intentionally indicate lower confidence. Forecasts are estimates, not revenue-grade guarantees.
+
+## Accuracy and limitations
+
+- Weather timing is the largest unavoidable uncertainty, especially for local or fast-moving clouds.
+- In regions without native 15-minute weather output, the provider may interpolate hourly data.
+- Recorder retention limits how far detailed power curves can be reconstructed.
+- Missing measurements remain missing; the integration does not invent zero production.
+- Export limiting, battery charging policy, inverter clipping, curtailment, snow, dirt and temporary shading can affect measured production.
+- The clear-day learner activates only after enough complete, validated history is available.
+- `Training Error` describes retrospective fit. `Forward Forecast Error` is the relevant day-ahead metric after enough future days complete.
+
+Read [FORECAST_ACCURACY.md](FORECAST_ACCURACY.md) for diagnostic details.
+
+## Privacy
+
+- Production measurements and learned samples stay in Home Assistant storage.
+- No private production history is committed to this repository.
+- Open-Meteo receives the configured coordinates and panel geometry needed to calculate irradiance.
+- No API key or separate cloud account is required.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| Integration is not listed | Restart Home Assistant after installation and clear the integration search |
+| Card is missing | Restart Home Assistant and hard-refresh the browser/app |
+| Old card still appears | Remove the manually registered `/local/solar-comparison-card.js` resource |
+| Historical curve has gaps | Check Recorder retention and source sensor availability |
+| Learned profile is inactive | Inspect `shape_calibration` on the `Today` sensor |
+| Forecast is unavailable | Verify internet access and check the integration log for Open-Meteo errors |
+
+When reporting a problem, include the Home Assistant version, integration version, relevant log entry and sanitized `Today` sensor diagnostics. Do not publish precise home coordinates or private energy history unless you deliberately choose to do so.
+
+## Development
+
+```bash
+python -m pytest -q tests
+node --test tests/test_card.cjs
+python -m compileall -q custom_components/solar_yield_forecast
+```
+
+GitHub Actions also runs HACS validation, Python tests, frontend tests, browser rendering and compile checks for every pull request.
+
+## Project status
+
+- Public GitHub repository
+- Semantic releases published through GitHub Releases
+- HACS custom-repository installation supported
+- Repository layout and metadata prepared for a future HACS default-catalog submission
+- MIT licensed
+
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for the complete version history.
+
+## Contributing
+
+Issues and focused pull requests are welcome. Please describe the installation layout, sensor units, expected behaviour and actual behaviour. Keep private recorder exports and exact residential coordinates out of public issues.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
+
+## License
+
+Released under the [MIT License](LICENSE).
+
+---
+
+<div align="center">
+
+Built for real roofs, real weather and transparent Home Assistant automation.
+
+</div>
