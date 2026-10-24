@@ -1,23 +1,45 @@
 /* Solar Comparison Card: day-aligned Sungrow power and 30-day forecast. */
 // Integrate recorder states as a step function, splitting at UTC quarter hours.
-// Unknown/unavailable states break coverage; incomplete intervals are not invented.
+// Unknown/unavailable gaps up to ten minutes are linearly bridged; longer
+// gaps break coverage so missing measurements are never hidden.
 function solarQuarterHours(rows, unit, now = Date.now()) {
-  const step = 900000, bins = new Map();
+  const step = 900000, maxInterpolatedGap = 600000, bins = new Map();
   const samples = rows.map(s => ({time: Date.parse(s.last_updated || s.last_changed),
     value: s.state === null || s.state === '' ? NaN : Number(s.state),
     unit: String(s.attributes?.unit_of_measurement || unit).toLowerCase()}))
     .filter(s => Number.isFinite(s.time)).sort((a,b) => a.time-b.time);
-  samples.forEach((s,i) => {
-    if (!Number.isFinite(s.value) || s.value < 0 || !['kw','w'].includes(s.unit)) return;
-    const watts = s.value * (s.unit === 'kw' ? 1000 : 1);
-    const end = Math.min(samples[i+1]?.time ?? now, now);
-    for (let t=s.time; t<end;) {
-      const start = Math.floor(t/step)*step, stop = Math.min(end,start+step);
-      const bin = bins.get(start) || {energy:0, covered:0};
-      bin.energy += watts*(stop-t); bin.covered += stop-t;
-      bins.set(start,bin); t=stop;
+  const watts = s => Number.isFinite(s?.value) && s.value >= 0 && ['kw','w'].includes(s.unit)
+    ? s.value * (s.unit === 'kw' ? 1000 : 1) : NaN;
+  const addSegment = (segmentStart, end, fromWatts, toWatts=fromWatts) => {
+    const duration=end-segmentStart;
+    for (let t=segmentStart; t<end;) {
+      const binStart = Math.floor(t/step)*step, stop = Math.min(end,binStart+step);
+      const bin = bins.get(binStart) || {energy:0, covered:0};
+      // Integrate the linear bridge exactly over this part of the quarter.
+      const a=duration ? (t-segmentStart)/duration : 0;
+      const b=duration ? (stop-segmentStart)/duration : 0;
+      bin.energy += ((fromWatts+(toWatts-fromWatts)*a)+(fromWatts+(toWatts-fromWatts)*b))/2*(stop-t);
+      bin.covered += stop-t;
+      bins.set(binStart,bin); t=stop;
     }
-  });
+  };
+  for (let i=0;i<samples.length;i++) {
+    const currentWatts=watts(samples[i]);
+    if (Number.isFinite(currentWatts)) {
+      addSegment(samples[i].time,Math.min(samples[i+1]?.time ?? now,now),currentWatts);
+      continue;
+    }
+    const gapStart=samples[i].time;
+    let lastInvalid=i;
+    while (lastInvalid+1<samples.length && !Number.isFinite(watts(samples[lastInvalid+1]))) lastInvalid++;
+    const previous=samples[i-1], next=samples[lastInvalid+1];
+    const previousWatts=watts(previous), nextWatts=watts(next);
+    if (Number.isFinite(previousWatts) && Number.isFinite(nextWatts) &&
+        next.time-gapStart<=maxInterpolatedGap) {
+      addSegment(gapStart,Math.min(next.time,now),previousWatts,nextWatts);
+    }
+    i=lastInvalid;
+  }
   return [...bins].filter(([t,b]) => t+step<=now && b.covered===step)
     .map(([t,b]) => ({time:t+step/2, power_w:b.energy/step, energy_kwh:b.energy/3600000000}));
 }

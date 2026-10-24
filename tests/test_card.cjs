@@ -11,8 +11,14 @@ test('time weighting rather than sample count; energy units',()=>{
  assert.equal(result.length,1);assert.equal(result[0].power_w,43000/15);
  assert.ok(Math.abs(result[0].energy_kwh-43/60)<1e-9);
 });
-test('unavailable breaks interval coverage',()=>{
- assert.equal(ctx.solarQuarterHours([row(0,1000),row(5,'unavailable'),row(10,1000)],'W',900000).length,0);
+test('unavailable gaps up to ten minutes are linearly interpolated',()=>{
+ const flat=ctx.solarQuarterHours([row(0,1000),row(5,'unavailable'),row(10,1000)],'W',900000);
+ assert.equal(flat.length,1);assert.equal(flat[0].power_w,1000);
+ const rising=ctx.solarQuarterHours([row(0,1000),row(5,'unknown'),row(15,3000)],'W',900000);
+ assert.equal(rising.length,1);assert.ok(Math.abs(rising[0].power_w-1666.6666666666667)<1e-9);
+});
+test('unavailable gaps longer than ten minutes still break coverage',()=>{
+ assert.equal(ctx.solarQuarterHours([row(0,1000),row(2,'unavailable'),row(13,1000)],'W',900000).length,0);
 });
 test('kW and partial intervals',()=>{
  assert.equal(ctx.solarQuarterHours([row(0,4)],'kW',900000)[0].energy_kwh,1);
