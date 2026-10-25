@@ -11,11 +11,11 @@ from homeassistant.helpers import entity_registry as er
 from .const import DOMAIN
 from .coordinator import SolarYieldCoordinator
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "button"]
 FRONTEND_URL = f"/api/{DOMAIN}/solar-comparison-card.js"
-FRONTEND_VERSION = "1.4.2"
+FRONTEND_VERSION = "1.4.3"
 PANEL_URL = "solar-yield-forecast"
-PANEL_TAG = "solar-yield-forecast-panel-v1-4-2"
+PANEL_TAG = "solar-yield-forecast-panel-v1-4-3"
 
 
 class SolarForecastProfileView(HomeAssistantView):
@@ -68,6 +68,9 @@ def _panel_config(hass, entry):
         ),
         "day_forecast_entity": entities.get(
             "today", "sensor.solar_yield_forecast_today"
+        ),
+        "recalculate_entity": entities.get(
+            "recalculate_model", "button.solar_yield_forecast_recalculate_model"
         ),
         "time_zone": values.get("time_zone", hass.config.time_zone),
     }

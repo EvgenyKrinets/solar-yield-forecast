@@ -1,3 +1,23 @@
+## 1.4.3 — Existing-history bootstrap and manual recalculation
+
+- Import up to 46 days of the selected daily-yield sensor from Home Assistant
+  Recorder on first setup, using the maximum valid value for each local solar
+  day and handling a delayed midnight reset.
+- Start installation-specific energy calibration immediately when at least
+  three suitable completed days already exist instead of waiting weeks after
+  installation.
+- Remove the former large-system-only 35/15 kWh calibration floor so smaller
+  residential arrays can learn from valid days as well.
+- Add a translated Model Status diagnostic showing whether the model is ready,
+  has loaded history, is still collecting data or has no production history.
+- Translate every integration sensor in Russian and English and group model
+  metrics as diagnostics.
+- Add a **Recalculate model** button both as a Home Assistant button entity and
+  in the sidebar application. It re-imports Recorder history, refreshes archive
+  weather, relearns the power-curve shape and rebuilds the forecast.
+- Keep stored production history isolated from a newly selected energy sensor,
+  preventing data from the previous source from contaminating calibration.
+
 ## 1.4.2 — Resilient weather data and profiles for every day
 
 - Keep the integration available when Open-Meteo returns isolated null GTI

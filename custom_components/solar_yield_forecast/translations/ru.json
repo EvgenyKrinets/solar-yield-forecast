@@ -105,5 +105,37 @@
       "location_not_found": "В выбранной стране такое место не найдено. Проверьте название или введите координаты вручную.",
       "geocoding_unavailable": "Сервис поиска мест временно недоступен. Повторите попытку или введите координаты вручную."
     }
+  },
+  "entity": {
+    "button": {
+      "recalculate_model": {
+        "name": "Пересчитать модель"
+      }
+    },
+    "sensor": {
+      "model_today": {"name": "Модель на сегодня"},
+      "today": {"name": "Прогноз на сегодня"},
+      "tomorrow": {"name": "Прогноз на завтра"},
+      "next_7_days": {"name": "Прогноз на 7 дней"},
+      "next_30_days": {"name": "Прогноз на 30 дней"},
+      "remaining_today": {"name": "Остаток на сегодня"},
+      "power_now": {"name": "Ожидаемая мощность сейчас"},
+      "power_profile_today": {"name": "Профиль мощности сегодня"},
+      "power_profile_tomorrow": {"name": "Профиль мощности завтра"},
+      "calibration_factor": {"name": "Коэффициент калибровки"},
+      "calibration_samples": {"name": "Дни калибровки"},
+      "training_error": {"name": "Ошибка обучения"},
+      "forward_error": {"name": "Ошибка предварительного прогноза"},
+      "forward_samples": {"name": "Проверенные прогнозы"},
+      "model_status": {
+        "name": "Состояние модели",
+        "state": {
+          "ready": "Готова",
+          "history_loaded": "История загружена, ожидается погодная калибровка",
+          "collecting_history": "Сбор истории",
+          "no_history": "История выработки отсутствует"
+        }
+      }
+    }
   }
 }

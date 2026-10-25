@@ -20,6 +20,7 @@ from .const import (CONF_PANEL_GROUPS, CONF_TIME_ZONE, DOMAIN, PANEL_GROUPS, API
 from .model import (combine_weather, calibration, daily_shape_normalizers, day_of_hour,
                     forecast_summary, open_meteo_azimuth, merge_quarter_hourly,
                     recent_live_scale)
+from .history import daily_energy_maxima
 _LOGGER = logging.getLogger(__name__)
 
 class SolarYieldCoordinator(DataUpdateCoordinator):
@@ -57,6 +58,8 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.archive_last_attempt: datetime | None = None
         self.ensemble_last_attempt: datetime | None = None
         self._unsub_energy = None
+        self.history_import = {"status": "not_started", "days": 0}
+        self._recalculate_lock = asyncio.Lock()
 
     async def async_initialize(self):
         seed_path = Path(__file__).with_name("daily_seed.json")
@@ -65,15 +68,22 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         except (FileNotFoundError, ValueError, OSError) as exc:
             _LOGGER.debug("No bundled history: %s", exc)
         data = await self.store.async_load() or {}
-        for day, value in data.get("actuals", {}).items():
+        daily_sensor = self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR)
+        stored_sensor = data.get("actuals_sensor")
+        same_energy_source = stored_sensor in (None, daily_sensor)
+        for day, value in (data.get("actuals", {}) if same_energy_source else {}).items():
             try:
                 val = float(value)
                 if math.isfinite(val):
                     self.actuals[day] = val
             except (TypeError, ValueError):
                 pass
-        self.daily_baselines = data.get("daily_baselines", {})
-        self.daily_errors = data.get("daily_errors", {})
+        self.daily_baselines = data.get("daily_baselines", {}) if same_energy_source else {}
+        self.daily_errors = data.get("daily_errors", {}) if same_energy_source else {}
+        self.history_import = (
+            data.get("history_import", self.history_import)
+            if same_energy_source else {"status": "not_started", "days": 0}
+        )
         self.live_comparisons = data.get("live_comparisons", [])[-5000:]
         if data.get("shape_signature") == self._shape_signature():
             try:
@@ -89,6 +99,69 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 self.shape_report = data.get("shape_report", {"status": "persisted_active"})
                 self.shape_profile_updated_at = data.get("shape_profile_updated_at")
         self._ingest_state(self.hass.states.get(self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR)))
+        await self.async_import_daily_history()
+
+    async def async_import_daily_history(self, force=False):
+        """Bootstrap completed daily yields from Recorder on a new installation."""
+        now = datetime.now(timezone.utc)
+        previous = self.history_import.get("updated_at")
+        if not force and previous:
+            try:
+                if now - datetime.fromisoformat(previous) < timedelta(hours=20):
+                    return self.history_import
+            except (TypeError, ValueError):
+                pass
+        if "recorder" not in self.hass.config.components:
+            self.history_import = {"status": "recorder_unavailable", "days": len(self.actuals)}
+            return self.history_import
+        entity = self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR)
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.history import get_significant_states
+            history = await get_instance(self.hass).async_add_executor_job(partial(
+                get_significant_states, self.hass, now-timedelta(days=46), now,
+                entity_ids=[entity], significant_changes_only=False,
+                minimal_response=False, no_attributes=False))
+            samples = []
+            for state in history.get(entity, []):
+                samples.append((
+                    state.last_updated.timestamp(), state.state,
+                    state.attributes.get("unit_of_measurement", "kWh"),
+                ))
+            imported = daily_energy_maxima(samples, self.tz)
+            for day, value in imported.items():
+                self.actuals[day] = max(value, self.actuals.get(day, -1.0))
+            self.history_import = {
+                "status": "imported" if imported else "no_history",
+                "days": len(imported),
+                "total_days": len(self.actuals),
+                "entity_id": entity,
+                "updated_at": now.isoformat(),
+            }
+            self._persist()
+        except Exception as exc:
+            _LOGGER.warning("Could not import daily production history: %s", exc)
+            self.history_import = {
+                "status": "error", "days": len(self.actuals),
+                "entity_id": entity, "updated_at": now.isoformat(),
+            }
+        return self.history_import
+
+    async def async_recalculate(self):
+        """Manually re-import history and rebuild every adaptive layer."""
+        async with self._recalculate_lock:
+            self.history_import = {**self.history_import, "status": "recalculating"}
+            self.archive_last_attempt = None
+            self.ensemble_last_attempt = None
+            self._shape_day = None
+            await self.async_import_daily_history(force=True)
+            await self.async_request_refresh()
+            self.history_import = {
+                **self.history_import,
+                "status": "completed",
+                "recalculated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self.async_set_updated_data(self._build_data())
 
     def _shape_signature(self):
         """Invalidate a learned profile only when the physical system changes."""
@@ -220,6 +293,8 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
     def _persist(self):
         self.store.async_delay_save(lambda: {
             "actuals": self.actuals,
+            "actuals_sensor": self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR),
+            "history_import": self.history_import,
             "daily_baselines": self.daily_baselines,
             "daily_errors": self.daily_errors,
             # Keep a private rolling power archive even when Recorder has a
@@ -286,6 +361,12 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "shape_factors_utc": self.shape_factors,
             "shape_profile_updated_at": self.shape_profile_updated_at,
             "live_correction_samples": live_samples,
+            "history_import": self.history_import,
+            "model_status": (
+                "ready" if self.cal_days >= 3 else
+                "history_loaded" if len(self.actuals) >= 3 else
+                "collecting_history" if self.actuals else "no_history"
+            ),
             "site": {
                 "name": self.config.get("site_name", self.entry.title),
                 "latitude": self.config.get(CONF_LATITUDE),
@@ -296,6 +377,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             },
         })
         self._update_scorecard(now, result)
+        result["forward_status"] = (
+            "validated" if result.get("forward_error_days") else "awaiting_completed_day"
+        )
         return result
 
     async def _async_update_data(self):

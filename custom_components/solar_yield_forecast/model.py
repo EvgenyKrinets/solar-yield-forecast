@@ -85,7 +85,10 @@ def calibration(actual_by_day, archive_rows, current_day, tz=TZ):
             continue
         actual = _number(actual_by_day[day], -1)
         theoretical = raw[day]
-        if theoretical >= 35 and actual >= 15:
+        # The integration supports small roofs as well as 30+ kWp systems.
+        # Absolute 35/15 kWh gates silently prevented calibration for smaller
+        # installations even when their daily sensor history was excellent.
+        if theoretical >= 2 and actual >= 1:
             r = actual / theoretical
             if 0.45 <= r <= 1.35:
                 ratios.append((day, r, actual, theoretical))

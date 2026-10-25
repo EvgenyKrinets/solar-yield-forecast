@@ -105,5 +105,37 @@
       "location_not_found": "No matching location was found in the selected country. Check the spelling or use manual coordinates.",
       "geocoding_unavailable": "The location search service is temporarily unavailable. Try again or use manual coordinates."
     }
+  },
+  "entity": {
+    "button": {
+      "recalculate_model": {
+        "name": "Recalculate model"
+      }
+    },
+    "sensor": {
+      "model_today": {"name": "Model today"},
+      "today": {"name": "Today"},
+      "tomorrow": {"name": "Tomorrow"},
+      "next_7_days": {"name": "Next 7 days"},
+      "next_30_days": {"name": "Next 30 days"},
+      "remaining_today": {"name": "Remaining today"},
+      "power_now": {"name": "Power now"},
+      "power_profile_today": {"name": "Power profile today"},
+      "power_profile_tomorrow": {"name": "Power profile tomorrow"},
+      "calibration_factor": {"name": "Calibration factor"},
+      "calibration_samples": {"name": "Calibration samples"},
+      "training_error": {"name": "Training error"},
+      "forward_error": {"name": "Forward forecast error"},
+      "forward_samples": {"name": "Forward forecast samples"},
+      "model_status": {
+        "name": "Model status",
+        "state": {
+          "ready": "Ready",
+          "history_loaded": "History loaded; weather calibration pending",
+          "collecting_history": "Collecting history",
+          "no_history": "No production history"
+        }
+      }
+    }
   }
 }

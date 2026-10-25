@@ -2,6 +2,7 @@
 from __future__ import annotations
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfEnergy, UnitOfPower, PERCENTAGE
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 
@@ -20,6 +21,7 @@ SENSORS = (
     ("training_error", "Training Error", "training_error", PERCENTAGE, None),
     ("forward_error", "Forward Forecast Error", "forward_error_percent", PERCENTAGE, None),
     ("forward_samples", "Forward Forecast Samples", "forward_error_days", None, None),
+    ("model_status", "Model Status", "model_status", None, SensorDeviceClass.ENUM),
 )
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -32,10 +34,15 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
         self.key = key
         self.field = field
         self._attr_unique_id = f"{entry.entry_id}_{key}"
-        self._attr_name = f"Solar Yield Forecast {label}"
+        self._attr_has_entity_name = True
+        self._attr_translation_key = key
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = dev_class
-        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_state_class = None if dev_class == SensorDeviceClass.ENUM else SensorStateClass.MEASUREMENT
+        if dev_class == SensorDeviceClass.ENUM:
+            self._attr_options = ["ready", "history_loaded", "collecting_history", "no_history"]
+        if key in {"calibration_factor", "calibration_samples", "training_error", "forward_error", "forward_samples", "model_status"}:
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
         capacity = sum(float(group.get("kwp", 0)) for group in coordinator.groups)
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
@@ -84,4 +91,15 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
             attrs["metric"] = "MAE percentage of one-or-more-day-ahead forecast snapshots"
         elif self.key == "training_error":
             attrs["error_description"] = "In-sample median error; not forward forecast accuracy"
+        elif self.key == "calibration_samples":
+            attrs["history_import"] = values.get("history_import", {})
+            attrs["minimum_required_days"] = 3
+        elif self.key == "model_status":
+            attrs.update({
+                "history_import": values.get("history_import", {}),
+                "calibration_days": values.get("calibration_days"),
+                "forward_status": values.get("forward_status"),
+                "forward_samples": values.get("forward_error_days"),
+                "shape_calibration": values.get("shape_calibration", {}),
+            })
         return attrs

@@ -102,11 +102,12 @@ const fs=require('node:fs');
  await page.evaluate(panelTag=>{
    window.panelMessages=[];
    const panel=document.createElement(panelTag);
-   panel.panel={config:{title:'Configured roof',pv_entity:'sensor.real_pv',energy_entity:'sensor.real_energy',forecast_entity:'sensor.real_profile',day_forecast_entity:'sensor.real_today',time_zone:'Asia/Jerusalem'}};
+   panel.panel={config:{title:'Configured roof',pv_entity:'sensor.real_pv',energy_entity:'sensor.real_energy',forecast_entity:'sensor.real_profile',day_forecast_entity:'sensor.real_today',recalculate_entity:'button.recalculate_model',time_zone:'Asia/Jerusalem'}};
    panel.hass={...window.fixture,user:{is_admin:true},states:{...window.fixture.states,
      'sensor.real_pv':window.fixture.states['sensor.total_dc_power'],
      'sensor.real_profile':window.fixture.states['sensor.solar_yield_forecast_power_profile_today'],
      'sensor.real_today':window.fixture.states['sensor.solar_yield_forecast_today']},
+     callService:async(domain,service,data)=>{window.recalculateCall={domain,service,data};},
      connection:{sendMessagePromise:async message=>{window.panelMessages.push(message);return message.type==='lovelace/dashboards/list'?[]:{}}}};
    document.body.append(panel);window.panelFixture=panel;
  },panelTag);
@@ -119,6 +120,8 @@ const fs=require('node:fs');
  });
  assert.equal(managed.pv,'sensor.real_pv');assert.equal(managed.energy,'sensor.real_energy');
  assert.equal(managed.settingsHidden,false);assert.equal(managed.settingsTitle,'Settings');
+ await page.locator(panelTag).locator('.recalculate').click();
+ assert.deepEqual(await page.evaluate(()=>window.recalculateCall),{domain:'button',service:'press',data:{entity_id:'button.recalculate_model'}});
  assert.ok(managed.created);assert.ok(Array.isArray(managed.views));assert.equal(managed.views[0].cards.length,1);
  assert.deepEqual(errors,[]);await browser.close();console.log('Browser: curves, readable fonts, responsive bars, hover, compact, invalid timestamps, refresh failure passed');
 })().catch(e=>{console.error(e);process.exit(1)});
