@@ -1,5 +1,7 @@
 import importlib.util, sys, types
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 BASE=Path(__file__).resolve().parents[1]/"custom_components"/"solar_yield_forecast"
 pkg=types.ModuleType("solar_yield_forecast");pkg.__path__=[str(BASE)];sys.modules["solar_yield_forecast"]=pkg
 for name in ("const","model"):
@@ -22,3 +24,17 @@ def test_custom_group_uses_its_own_capacity():
 
 def test_empty_history():
     assert calibration({},[],"2026-10-22")== (1.0,0,None)
+
+
+def test_small_residential_array_can_calibrate():
+    rows=[]
+    actuals={}
+    for day,value in enumerate((4.0,4.4,3.6),start=1):
+        date=f"2026-10-{day:02d}"
+        actuals[date]=value
+        end=datetime.fromisoformat(date+"T12:00:00+00:00").timestamp()
+        rows.append({"end":end,"kw":4.0})
+    factor,days,error=calibration(actuals,rows,"2026-10-22",ZoneInfo("UTC"))
+    assert factor==1.0
+    assert days==3
+    assert error is not None

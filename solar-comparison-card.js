@@ -459,7 +459,7 @@ class SolarComparisonCompactCard extends SolarComparisonCard {
 }
 if(!customElements.get('solar-comparison-compact')) customElements.define('solar-comparison-compact', SolarComparisonCompactCard);
 
-const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-4-2';
+const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-4-3';
 const SOLAR_MANAGED_DASHBOARD='solar-yield-forecast-dashboard';
 
 function solarPanelCardConfig(config={}) {
@@ -498,12 +498,13 @@ class SolarYieldForecastPanel extends HTMLElement {
       :host{display:block;min-height:100%;box-sizing:border-box;background:var(--primary-background-color,#fafafa);color:var(--primary-text-color,#212121)}
       header{max-width:1280px;margin:0 auto;padding:14px 20px 0;display:flex;align-items:center;justify-content:space-between;box-sizing:border-box}
       header strong{font-size:20px;line-height:40px}
-      .settings{border:0;border-radius:20px;background:var(--secondary-background-color,#eee);color:var(--primary-text-color,#212121);height:40px;padding:0 16px;display:flex;align-items:center;gap:8px;font:inherit;cursor:pointer}
-      .settings:hover{background:var(--divider-color,#ddd)}
-      .settings[hidden]{display:none}
+      .actions{display:flex;align-items:center;gap:8px}.action{border:0;border-radius:20px;background:var(--secondary-background-color,#eee);color:var(--primary-text-color,#212121);height:40px;padding:0 16px;display:flex;align-items:center;gap:8px;font:inherit;cursor:pointer}
+      .action:hover{background:var(--divider-color,#ddd)}.action:disabled{opacity:.55;cursor:wait}
+      .action[hidden]{display:none}
       main{max-width:1280px;margin:0 auto;padding:20px;box-sizing:border-box}
-      @media(max-width:600px){header{padding:8px 8px 0}header strong{font-size:17px}.settings{width:40px;padding:0;justify-content:center}.settings span{display:none}main{padding:8px}}
-    </style><header><strong></strong><button class="settings" type="button"><ha-icon icon="mdi:cog"></ha-icon><span></span></button></header><main></main>`;
+      @media(max-width:600px){header{padding:8px 8px 0}header strong{font-size:17px}.action{width:40px;padding:0;justify-content:center}.action span{display:none}main{padding:8px}}
+    </style><header><strong></strong><div class="actions"><button class="recalculate action" type="button"><ha-icon icon="mdi:calculator-variant-outline"></ha-icon><span></span></button><button class="settings action" type="button"><ha-icon icon="mdi:cog"></ha-icon><span></span></button></div></header><main></main>`;
+    this.shadowRoot.querySelector('.recalculate').addEventListener('click',()=>this._recalculate());
     this.shadowRoot.querySelector('.settings').addEventListener('click',()=>this._openSettings());
   }
   set panel(value){this._panel=value;this._sync();}
@@ -515,6 +516,20 @@ class SolarYieldForecastPanel extends HTMLElement {
     const language=String(this._hass?.language||'en').toLowerCase();
     return language.startsWith('ru')?'Настройки':language.startsWith('he')?'הגדרות':'Settings';
   }
+  _recalculateLabel(){
+    const language=String(this._hass?.language||'en').toLowerCase();
+    return language.startsWith('ru')?'Пересчитать модель':language.startsWith('he')?'חשב מחדש':'Recalculate model';
+  }
+  async _recalculate(){
+    const button=this.shadowRoot.querySelector('.recalculate'),label=this._recalculateLabel();
+    button.disabled=true;button.title=label+'…';
+    try{
+      await this._hass.callService('button','press',{entity_id:this._config().recalculate_entity});
+      button.title=String(this._hass?.language||'en').toLowerCase().startsWith('ru')?'Пересчёт завершён':'Recalculation completed';
+    }catch(error){
+      button.title=error?.message||'Recalculation failed';
+    }finally{button.disabled=false;}
+  }
   _openSettings(){
     history.pushState(null,'','/config/integrations/integration/solar_yield_forecast');
     window.dispatchEvent(new Event('location-changed'));
@@ -522,11 +537,16 @@ class SolarYieldForecastPanel extends HTMLElement {
   _sync(){
     if(!this._hass)return;
     const label=this._settingsLabel();
+    const recalculateLabel=this._recalculateLabel();
     this.shadowRoot.querySelector('header strong').textContent=this._config().title||'Solar Yield Forecast';
     const settings=this.shadowRoot.querySelector('.settings');
     settings.hidden=!this._hass.user?.is_admin;
     settings.title=label;settings.setAttribute('aria-label',label);
     settings.querySelector('span').textContent=label;
+    const recalculate=this.shadowRoot.querySelector('.recalculate');
+    recalculate.hidden=!this._hass.user?.is_admin;
+    recalculate.title=recalculateLabel;recalculate.setAttribute('aria-label',recalculateLabel);
+    recalculate.querySelector('span').textContent=recalculateLabel;
     const config=solarPanelCardConfig(this._config());
     const signature=JSON.stringify(config);
     if(!this._card){

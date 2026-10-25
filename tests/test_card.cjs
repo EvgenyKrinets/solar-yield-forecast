@@ -127,6 +127,8 @@ test('managed dashboard always contains a valid views array and exact entities',
 test('sidebar application exposes integration settings to administrators',()=>{
  assert.match(source,/class SolarYieldForecastPanel/);
  assert.match(source,/\/config\/integrations\/integration\/solar_yield_forecast/);
- assert.match(source,/class="settings"/);
+ assert.match(source,/class="settings action"/);
  assert.match(source,/settings\.hidden=!this\._hass\.user\?\.is_admin/);
+ assert.match(source,/class="recalculate action"/);
+ assert.match(source,/callService\('button','press'/);
 });
