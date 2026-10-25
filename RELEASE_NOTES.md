@@ -1,3 +1,17 @@
+## 1.4.5 — Reliable history, visible recalculation and city autocomplete
+
+- Learning now linearly bridges bracketed unavailable gaps up to **10 minutes**, consistently with the chart. Longer, leading and trailing gaps remain missing. Quality thresholds are not relaxed.
+- Report per-day exclusion reasons and coverage; insufficient history no longer claims that fitting or validation took place.
+- Manual recalculation awaits an actual forecast refresh, publishes stages and duration, rejects concurrent requests and distinguishes success, warnings and failure. A persistent HA notification reports progress when the notification component is enabled.
+- Add a recalculation diagnostic sensor and distinguish daily-only calibration from a trained power profile. Keep the button exclusively on the integration device configuration page, with retry available after weather failures.
+- Country selection uses HA's searchable country picker. After choosing a country, the native city autocomplete filters a preloaded GeoNames major-city catalogue from the first typed character. Results include exact city-centre coordinates, IANA time zone, and selected transliterations/aliases.
+- Download/cache the GeoNames catalogue once per HA session, with bounded archive sizes. If it is unavailable or a small place is not listed, typed full-name search through Open-Meteo remains available. No country-centroid coordinate fallback.
+- Add weather-only power, daily factor, profile multiplier and cloud cover to intraday forecast diagnostics, allowing weather features to be distinguished from learned profile corrections.
+
+Update through HACS and restart HA. On the integration device press **Recalculate model**, then inspect **Recalculation status**, **Model status** and `shape_calibration.day_diagnostics`. Completion does not guarantee that the available history passed profile validation.
+
+City data: [GeoNames](https://www.geonames.org/), [cities15000](https://download.geonames.org/export/dump/), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The catalogue covers major towns/capitals rather than every village; it is an online dependency for initial suggestions, not for existing configured forecasts.
+
 ## 1.4.4 — Installation-specific power shape, city selection and settings controls
 
 - Learn smooth 15-minute actual/model residual profiles from each installation's own power history. Prefer at least three provider-confirmed clear days; retain a conservative all-weather fallback only with sufficient history.

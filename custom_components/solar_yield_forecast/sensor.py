@@ -22,6 +22,7 @@ SENSORS = (
     ("forward_error", "Forward Forecast Error", "forward_error_percent", PERCENTAGE, None),
     ("forward_samples", "Forward Forecast Samples", "forward_error_days", None, None),
     ("model_status", "Model Status", "model_status", None, SensorDeviceClass.ENUM),
+    ('recalculation_status','Recalculation status','recalculation_status',None,SensorDeviceClass.ENUM),
 )
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -43,8 +44,10 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
         self._attr_device_class = dev_class
         self._attr_state_class = None if dev_class == SensorDeviceClass.ENUM else SensorStateClass.MEASUREMENT
         if dev_class == SensorDeviceClass.ENUM:
-            self._attr_options = ["ready", "history_loaded", "collecting_history", "no_history"]
-        if key in {"calibration_factor", "calibration_samples", "training_error", "forward_error", "forward_samples", "model_status"}:
+            self._attr_options = (['idle','running','completed','completed_with_warnings','failed']
+                if key=='recalculation_status' else
+                ['ready','calibration_only','recalculating','history_loaded','collecting_history','no_history'])
+        if key in {"calibration_factor", "calibration_samples", "training_error", "forward_error", "forward_samples", "model_status",'recalculation_status'}:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
         capacity = sum(float(group.get("kwp", 0)) for group in coordinator.groups)
         self._attr_device_info = {
@@ -61,6 +64,8 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self):
         values = self.coordinator.data or {}
         attrs = {"forecast_updated_at": values.get("updated_at")}
+        if self.key in ('model_status','recalculation_status'):
+            attrs['recalculation'] = values.get('recalculation',{})
         if self.key == "today":
             attrs.update({
                 "daily_forecast": values.get("daily", []),

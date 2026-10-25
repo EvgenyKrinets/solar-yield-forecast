@@ -205,7 +205,10 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         if start <= now_ts < end:
             live_kw = live_kw_value
             current_interval_found = True
-        by_day[date].append({"start": datetime.fromtimestamp(start, tz).isoformat(), "kw": calibrated_kw, "interval_seconds": seconds})
+        by_day[date].append({"start": datetime.fromtimestamp(start, tz).isoformat(), "kw": calibrated_kw, "interval_seconds": seconds,
+            'weather_kw':round(row['kw'],4), 'daily_calibration_factor':round(factor,5),
+            'profile_multiplier':round(shape_value/shape_mean,5),
+            'cloud_cover_percent':row.get('cloud_cover')})
         if date == today_iso:
             fraction_left = max(0.0, min(1.0, (end - now_ts) / seconds))
             # Same-day live correction affects only energy that is still in

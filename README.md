@@ -296,7 +296,8 @@ Released under the [MIT License](LICENSE).
 Built for real roofs, real weather and transparent Home Assistant automation.
 
 </div>
-# Model update — 1.4.4
+
+# Model update — 1.4.5
 
 The adaptive profile is learned independently for each installation from its own
 15-minute PV power history. A continuous measured/model residual corrects the
@@ -311,10 +312,24 @@ under configuration controls, not on the main chart. The Settings button opens
 the integration. Existing entity IDs and user-assigned names remain unchanged.
 
 Location setup offers **Home Assistant home**, **Search country and city**, and
-**Manual coordinates**. For city search, enter the country and city name, select
-the exact result (including coordinates and time zone), then confirm its position.
-Search is submitted through the native Home Assistant wizard; it is not a
-live-updating map/autocomplete on one page. Coordinates never come from a country
-centroid. For a remote roof, use manual coordinates if the city centre is not
-precise enough. История графиков за прошлые дни — пересчёт модели по доступной
+**Manual coordinates**. Type a country name in HA's searchable country picker,
+confirm the country, then type in the city picker: matching catalogue entries
+appear from the first character. Each entry shows its coordinates and time zone,
+so the selected field immediately identifies the chosen point. A final wizard
+step confirms it. This is not a map or a single combined reactive country/city form.
+GeoNames major-city suggestions are downloaded once per HA session; for villages
+not listed or a catalogue outage, enter the full city name and confirm an
+Open-Meteo search. Coordinates never come from a country centroid. For a remote
+roof, use manual coordinates if the city centre is not precise enough.
+
+The learning path and chart both bridge bounded unavailable gaps up to ten
+minutes. `shape_calibration.day_diagnostics` explains excluded days.
+**Recalculation status** reports real completion, stages, duration and errors;
+**Model status** distinguishes daily-only calibration from a learned profile.
+An optional persistent HA notification also shows the manual operation's outcome.
+История графиков за прошлые дни — пересчёт модели по доступной
 погоде, а не сохранённый прогноз, выпущенный до наступления этого дня.
+
+City suggestions contain information from [GeoNames](https://www.geonames.org/),
+available under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), using
+the [cities15000 dataset](https://download.geonames.org/export/dump/).
