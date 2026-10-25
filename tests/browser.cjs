@@ -6,6 +6,9 @@ const fs=require('node:fs');
  const panelTag=frontend.match(/const SOLAR_PANEL_TAG='([^']+)'/)[1];
  const browser=await chromium.launch({headless:true,...(process.env.BROWSER_CHANNEL ? {channel:process.env.BROWSER_CHANNEL} : {})});
  const page=await browser.newPage();
+ // Fixtures require completed quarters in the current day. Pin the clock so
+ // a release crossing local midnight does not erase today's sample series.
+ await page.clock.install({time:new Date('2026-10-24T12:00:00Z')});
  const errors=[];page.on('pageerror',e=>errors.push(String(e)));
  await page.setContent('<body style="margin:0"><solar-comparison-card></solar-comparison-card></body>');
  await page.addScriptTag({path:'custom_components/solar_yield_forecast/frontend/solar-comparison-card.js'});
