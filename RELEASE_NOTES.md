@@ -1,3 +1,15 @@
+## 1.4.2 — Resilient weather data and profiles for every day
+
+- Keep the integration available when Open-Meteo returns isolated null GTI
+  intervals; skip only incomplete timestamps instead of rejecting the complete
+  forecast response with `Missing hourly irradiance`.
+- Provide the calculated green power curve for each available date: up to 30
+  previous days, today and all future days supplied by the regular and
+  long-range weather models.
+- Load only the selected day's profile through an authenticated endpoint, so
+  the Home Assistant state and Recorder database are not inflated with all
+  profiles at once.
+
 ## 1.4.1 — Home Assistant location and in-app settings
 
 - Use Home Assistant's configured home name, latitude, longitude and time zone
