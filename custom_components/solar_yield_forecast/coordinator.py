@@ -665,6 +665,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             if self.shape_factors:
                 self.shape_report = {
                     "status": "persisted_active",
+                    'active_profile':self.shape_report.get('active_profile',{}),
                     "latest_candidate_status": "history_error",
                     "profile_source": "stored_validated_profile",
                     "profile_updated_at": self.shape_profile_updated_at,
