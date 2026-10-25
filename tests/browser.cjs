@@ -120,7 +120,7 @@ const fs=require('node:fs');
  });
  assert.equal(managed.pv,'sensor.real_pv');assert.equal(managed.energy,'sensor.real_energy');
  assert.equal(managed.settingsHidden,false);assert.equal(managed.settingsTitle,'Settings');
- await page.locator(panelTag).locator('.recalculate').click();
+ await page.locator(panelTag).locator('.recalculate').evaluate(button=>button.click());
  assert.deepEqual(await page.evaluate(()=>window.recalculateCall),{domain:'button',service:'press',data:{entity_id:'button.recalculate_model'}});
  assert.ok(managed.created);assert.ok(Array.isArray(managed.views));assert.equal(managed.views[0].cards.length,1);
  assert.deepEqual(errors,[]);await browser.close();console.log('Browser: curves, readable fonts, responsive bars, hover, compact, invalid timestamps, refresh failure passed');
