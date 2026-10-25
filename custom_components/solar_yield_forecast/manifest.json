@@ -1,23 +1,23 @@
 {
-  "domain": "solar_yield_forecast",
-  "name": "Solar Yield Forecast",
-  "version": "1.5.0",
-  "documentation": "https://github.com/EvgenyKrinets/solar-yield-forecast",
-  "config_flow": true,
-  "iot_class": "cloud_polling",
-  "integration_type": "hub",
-  "requirements": [],
-  "issue_tracker": "https://github.com/EvgenyKrinets/solar-yield-forecast/issues",
+  "after_dependencies": [
+    "recorder"
+  ],
   "codeowners": [
     "@EvgenyKrinets"
   ],
+  "config_flow": true,
   "dependencies": [
     "frontend",
     "http",
     "lovelace",
     "panel_custom"
   ],
-  "after_dependencies": [
-    "recorder"
-  ]
+  "documentation": "https://github.com/EvgenyKrinets/solar-yield-forecast",
+  "domain": "solar_yield_forecast",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/EvgenyKrinets/solar-yield-forecast/issues",
+  "name": "Solar Yield Forecast",
+  "requirements": [],
+  "version": "1.5.0"
 }
