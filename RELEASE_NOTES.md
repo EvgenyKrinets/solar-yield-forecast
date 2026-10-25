@@ -1,3 +1,17 @@
+## 1.5.0 — Robust all-weather learning and independent 90-day power archive
+
+- Use **all eligible completed days**, rather than selecting only three clear days. Clear-day weights are modestly higher (1.25 versus 0.75–1.0); weather remains an input at every interval.
+- Require at least seven eligible days and at least three chronological holdout days. Ten eligible days now yield **seven training + three validation days**. The current incomplete day is never used.
+- Normalize per-day energy, reject interval outliers with median/MAD, fit bounded weighted medians and smooth broad bias. Shrink corrections by `min(1, training_days / 14)` confidence, which is a correction-strength limit, **not a probability or guaranteed accuracy**.
+- Require overall held-out improvement, non-worsening behavior on at least two thirds of validation days, and guarded morning/peak/evening errors. A new compatible candidate must also improve on the previously active profile.
+- Report exact training/validation dates, per-date and per-phase validation errors, confidence, maximum day weight, and a separate `active_profile` summary when an older validated V3 profile is retained.
+- Invalidate V2 learned factors on this model upgrade; measured production history is preserved. With insufficient support or failed validation, fall back to the weather model rather than force an unverified shape.
+- Store measured 15-minute energy and coverage for a rolling **90 days** in Home Assistant integration storage, separately from Recorder. Record power/unknown states even when forecasts are unavailable; preserve short-gap rules and conservatively handle restarts.
+- Bootstrap existing detailed Recorder history in bounded three-day chunks, preserve complete archived intervals across Recorder purges, and combine historical weather with the recent forecast history. Archived power alone cannot recover deleted measurements or replace missing weather.
+- Bound storage write frequency, save completed manual recalculation explicitly, and avoid false empty warning blocks. Notifications now include active training/validation counts and confidence.
+
+Update through HACS, restart HA, then press **Recalculate model** on the integration device. Inspect `shape_calibration.active_profile`, `training_dates`, `validation_dates`, `validation_by_phase` and `power_archive`. Daily energy calibration and forward day-ahead accuracy remain distinct; this release's shape acceptance is a retrospective held-out check, not a promise of future accuracy.
+
 ## 1.4.6 — Actionable provider errors and readable city selections
 
 - Preserve request context on weather errors: provider endpoint, panel-group ID, exception type, HTTP status, attempts, timeout and Retry-After. Aggregate failed orientations and drain in-flight batches before reporting failure.

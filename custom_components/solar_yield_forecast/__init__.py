@@ -13,9 +13,9 @@ from .coordinator import SolarYieldCoordinator
 
 PLATFORMS = ["sensor", "button"]
 FRONTEND_URL = f"/api/{DOMAIN}/solar-comparison-card.js"
-FRONTEND_VERSION = "1.4.6"
+FRONTEND_VERSION = "1.5.0"
 PANEL_URL = "solar-yield-forecast"
-PANEL_TAG = "solar-yield-forecast-panel-v1-4-6"
+PANEL_TAG = "solar-yield-forecast-panel-v1-5-0"
 
 
 class SolarForecastProfileView(HomeAssistantView):

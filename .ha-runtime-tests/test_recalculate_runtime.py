@@ -115,3 +115,32 @@ async def test_http_rate_limit_preserves_status_group_and_retry_after(hass,enabl
     assert details['http_status']==429 and details['attempts']==1
     assert details['retry_after']=='60' and details['group_id']==obj.groups[0]['id']
     assert '429' in str(caught.value)
+
+
+async def test_power_recording_does_not_require_weather(hass,enable_custom_integrations):
+    from unittest.mock import MagicMock
+    obj=coordinator(hass);obj._persist=MagicMock()
+    obj._power_changed(SimpleNamespace(data={'new_state':SimpleNamespace(
+        state='4000',attributes={'unit_of_measurement':'W'})}))
+    assert obj.power_archive.pending[-1][1]==4
+    obj._power_changed(SimpleNamespace(data={'new_state':SimpleNamespace(
+        state='unavailable',attributes={'unit_of_measurement':'W'})}))
+    assert obj.power_archive.pending[-1][1] is None
+
+
+async def test_own_archive_can_train_without_recorder(hass,enable_custom_integrations):
+    from datetime import datetime,timezone,timedelta
+    from unittest.mock import MagicMock
+    import math
+    obj=coordinator(hass);obj._persist=MagicMock()
+    start=datetime(2026,10,1,tzinfo=timezone.utc)
+    for day in range(10):
+        for q in range(96):
+            stamp=(start+timedelta(days=day,minutes=15*q)).timestamp()
+            p=16*max(0,math.sin(math.pi*(q-24)/48)) if 24<=q<=72 else 0
+            obj.forecast_rows.append(dict(end=stamp+900,interval_seconds=900,kw=p,cloud_cover=4))
+            obj.power_archive.bins[int(stamp)]=[p*(1.25 if q<46 else .7)*.25,900]
+    await obj._learn_shape(datetime(2026,10,20,tzinfo=timezone.utc))
+    assert obj.shape_report['training_days']==7 and obj.shape_report['validation_days']==3
+    assert obj.shape_report['status']=='active'
+    assert obj.shape_report['active_profile']['confidence_percent']==50
