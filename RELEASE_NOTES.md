@@ -1,3 +1,14 @@
+## 1.4.6 — Actionable provider errors and readable city selections
+
+- Preserve request context on weather errors: provider endpoint, panel-group ID, exception type, HTTP status, attempts, timeout and Retry-After. Aggregate failed orientations and drain in-flight batches before reporting failure.
+- Retry transient connection/time-out/5xx failures once. Do not immediately retry HTTP 429 or other 4xx errors. Empty exception messages now produce an explicit type/time-out explanation rather than a blank failure toast.
+- Show the failure in the manual-recalculation notification and diagnostics, not just a stale-data message. Keep status entities and the retry button available even when forecast updates fail.
+- Keep previously loaded forecasts visible only within a bounded six-hour, same-local-day cache, clearly marked stale with the concrete error and original weather timestamp. Expired or absent forecast data is unavailable; cached values are never labeled fresh. The cache is in memory, not a guarantee of offline startup after restarting HA.
+- Show a visible warning on the main chart with the actual update error.
+- Fix the city autocomplete showing a numeric GeoNames ID after selection. Its displayed value is now the readable city label with coordinates/time zone; backend coordinates still come from the selected catalogue record.
+
+Update via HACS and restart Home Assistant. A new recalculation will either complete or report its concrete provider failure. The empty error emitted by older versions cannot retrospectively prove which provider/network failure occurred.
+
 ## 1.4.5 — Reliable history, visible recalculation and city autocomplete
 
 - Learning now linearly bridges bracketed unavailable gaps up to **10 minutes**, consistently with the chart. Longer, leading and trailing gaps remain missing. Quality thresholds are not relaxed.

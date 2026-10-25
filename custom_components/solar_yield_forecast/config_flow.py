@@ -199,7 +199,8 @@ class CityLocationFlow:
         if user_input is not None:
             if user_input.get('search_again'):
                 return await self.async_step_place()
-            place = self._catalog_places.get(user_input['city'])
+            place = (getattr(self,'_catalog_choices',{}).get(user_input['city'])
+                     or self._catalog_places.get(user_input['city']))
             if place is not None:
                 self._places = {place['key']:place}
                 return await self.async_step_city_result({'city':place['key']})
@@ -208,10 +209,14 @@ class CityLocationFlow:
             return await self.async_step_place({
                 'country':self._place_query['country'],'city_query':user_input['city']})
         options=[]
+        self._catalog_choices={}
         for place in self._catalog_places.values():
             aliases=' / '.join(place.get('aliases',[]))
             label=location_label(place)+(f' · {aliases}' if aliases else '')
-            options.append({'value':place['key'],'label':label})
+            # HA's custom-value combobox can display the raw value rather than
+            # the option label. Use a readable, unambiguous value, never an ID.
+            options.append({'value':label,'label':label})
+            self._catalog_choices[label]=place
         return self.async_show_form(step_id='city_picker',
             description_placeholders={'catalog_status':
                 'GeoNames unavailable — Open-Meteo name search remains available.' if self._catalog_error

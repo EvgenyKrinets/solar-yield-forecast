@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-from aiohttp import ClientError, ClientTimeout
+from aiohttp import ClientError, ClientTimeout, ClientConnectionError, ClientResponseError
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_state_change_event
@@ -23,7 +23,14 @@ from .model import (combine_weather, calibration, daily_shape_normalizers, day_o
                     forecast_summary, open_meteo_azimuth, merge_quarter_hourly,
                     recent_live_scale, quarter_weather_rows)
 from .history import daily_energy_maxima
+from .freshness import usable_forecast
 _LOGGER = logging.getLogger(__name__)
+
+class WeatherRequestError(ClientError):
+    """Actionable provider error, retaining machine-readable request context."""
+    def __init__(self, message, details):
+        super().__init__(message)
+        self.details=details
 
 class SolarYieldCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
@@ -65,6 +72,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self._model_update_lock = asyncio.Lock()
         self.recalculation = {'status':'idle','stage':None}
         self._archive_error = None
+        self.weather_updated_at = None
+        self.weather_error = None
+        self._active_update_stage = None
 
     async def async_initialize(self):
         seed_path = Path(__file__).with_name("daily_seed.json")
@@ -159,6 +169,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             self.history_import = {
                 "status": "error", "days": len(self.actuals),
                 "entity_id": entity, "updated_at": now.isoformat(),
+                'error':str(exc) or type(exc).__name__,
             }
         return self.history_import
 
@@ -191,12 +202,15 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                     warnings.append('power_history_unavailable')
                 self.recalculation.update(status='completed_with_warnings' if warnings else 'completed',
                     stage='finished',warnings=warnings,shape_status=self.shape_report.get('status'),
+                    warning_details={'archive_weather':self._archive_error,
+                                     'history':self.history_import.get('error')},
                     eligible_profile_days=self.shape_report.get('available_days',0))
             except asyncio.CancelledError:
                 self.recalculation.update(status='failed',stage='cancelled',error='Recalculation cancelled')
                 raise
             except Exception as exc:
-                self.recalculation.update(status='failed',error=str(exc))
+                self.recalculation.update(status='failed',error=str(exc),
+                    failure=dict(self.weather_error or {}))
                 raise HomeAssistantError(f'Model recalculation failed: {exc}') from exc
             finally:
                 self.recalculation.update(finished_at=datetime.now(timezone.utc).isoformat(),
@@ -204,6 +218,8 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 self._publish_recalculation()
 
     def _publish_recalculation(self, stage=None):
+        if stage is not None:
+            self._active_update_stage=stage
         if stage is not None and self.recalculation.get('status')!='running':
             return
         if stage is not None and self.recalculation.get('status')=='running':
@@ -225,6 +241,12 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                             f"\n\nEligible profile days: {self.shape_report.get('available_days',0)}")
             if self.recalculation.get('error'):
                 message += f"\n\n{self.recalculation['error']}"
+                failure=self.recalculation.get('failure',{})
+                message += f"\n\nFailed at: {failure.get('failed_at','—')}"
+                if failure.get('requests'):
+                    message += '\n\nRequest details:\n'+json.dumps(failure['requests'],ensure_ascii=False,indent=2)
+            if self.recalculation.get('warning_details'):
+                message += '\n\nWarnings:\n'+json.dumps(self.recalculation['warning_details'],ensure_ascii=False,indent=2)
             persistent_notification.async_create(self.hass,message,
                 title='Solar Yield Forecast — model recalculation',
                 notification_id=f'solar_yield_forecast_recalculate_{self.entry.entry_id}')
@@ -232,6 +254,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
     def _model_status(self):
         if self.recalculation.get('status')=='running':
             return 'recalculating'
+        if self.weather_error:
+            return ('weather_stale' if usable_forecast(self.data,datetime.now(timezone.utc),self.tz)
+                    else 'weather_unavailable')
         if self.cal_days>=3:
             return 'ready' if self.shape_factors else 'calibration_only'
         if len(self.actuals)>=3:
@@ -260,19 +285,42 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "timeformat": "unixtime",
             **extras,
         }
-        async with self.session.get(base, params=params, timeout=ClientTimeout(total=30)) as response:
-            response.raise_for_status()
-            data = await response.json(content_type=None)
-            if data.get("error"):
-                raise ValueError(data.get("reason", "Open-Meteo API error"))
-            return data
+        for attempt in range(2):
+            try:
+                async with self.session.get(base, params=params, timeout=ClientTimeout(total=30)) as response:
+                    response.raise_for_status()
+                    data = await response.json(content_type=None)
+                    if data.get('error'):
+                        raise ValueError(data.get('reason','Open-Meteo API error'))
+                    return data
+            except (ClientError,asyncio.TimeoutError,ValueError) as exc:
+                retryable = (isinstance(exc,(ClientConnectionError,asyncio.TimeoutError))
+                    or isinstance(exc,ClientResponseError) and exc.status>=500)
+                if attempt==0 and retryable:
+                    await asyncio.sleep(1)
+                    continue
+                detail=('request timed out after 30 seconds' if isinstance(exc,asyncio.TimeoutError)
+                        else str(exc) or type(exc).__name__)
+                details={'provider_url':base,'group_id':group['id'],
+                    'exception_type':type(exc).__name__,'http_status':getattr(exc,'status',None),
+                    'attempts':attempt+1,'timeout_seconds':30,
+                    'retry_after':getattr(exc,'headers',{}).get('Retry-After') if getattr(exc,'headers',None) else None}
+                raise WeatherRequestError(f"Open-Meteo group {group['id']}: {detail}",[details]) from exc
 
     async def _get_groups(self, base, extras):
         semaphore = asyncio.Semaphore(3)
         async def get(group):
             async with semaphore:
                 return await self._one_group(base, group, extras)
-        responses = await asyncio.gather(*(get(g) for g in self.groups))
+        # Drain the batch even if one orientation fails: no orphan requests or
+        # response writes may continue after the caller reports completion.
+        responses = await asyncio.gather(*(get(g) for g in self.groups),return_exceptions=True)
+        failures=[r for r in responses if isinstance(r,BaseException)]
+        if failures:
+            if isinstance(failures[0],WeatherRequestError):
+                raise WeatherRequestError('; '.join(str(r) for r in failures),
+                    [d for r in failures for d in getattr(r,'details',[])]) from failures[0]
+            raise failures[0]
         hourly = combine_weather(responses, self.groups)
         if base == API_FORECAST:
             self._hourly_weather = hourly
@@ -432,6 +480,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             self.shape_factors, tz=self.tz, today_scale=live_scale,
         )
         result.update({
+            'weather_updated_at':self.weather_updated_at,
+            'weather_status':'stale' if self.weather_error else 'fresh',
+            'last_refresh_error':self.weather_error,
             'recalculation':dict(self.recalculation),
             'recalculation_status':self.recalculation['status'],
             "factor_percent": round(self.factor * 100, 1),
@@ -465,6 +516,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             return await self._async_fetch_model()
 
     async def _async_fetch_model(self):
+        previous_weather_time=self.weather_updated_at
         try:
             now = datetime.now(timezone.utc)
             self._publish_recalculation('archive_weather')
@@ -478,9 +530,19 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             await self._maybe_refresh_ensemble(now)
             self._publish_recalculation('profile_training')
             await self._learn_shape(now)
+            self.weather_updated_at=datetime.now(timezone.utc).isoformat()
+            self.weather_error=None
             return self._build_data()
         except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
-            raise UpdateFailed(f"Open-Meteo forecast failed: {exc}") from exc
+            self.weather_updated_at=previous_weather_time
+            detail = str(exc) or ('request timed out' if isinstance(exc,asyncio.TimeoutError) else type(exc).__name__)
+            self.weather_error={'message':detail,'type':type(exc).__name__,
+                'failed_at':datetime.now(timezone.utc).isoformat(),
+                'stage':self._active_update_stage,'requests':getattr(exc,'details',[])}
+            if self.data is not None:
+                self.data={**self.data,'weather_status':'stale',
+                    'last_refresh_error':dict(self.weather_error),'model_status':self._model_status()}
+            raise UpdateFailed(f'Open-Meteo forecast failed: {detail}') from exc
 
     async def _learn_shape(self, now):
         today = now.astimezone(self.tz).date().isoformat()
