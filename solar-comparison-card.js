@@ -206,7 +206,9 @@ class SolarComparisonCard extends HTMLElement {
       const parts=f.format(d).split(':').map(Number);
       actual[idx].push([parts[0]+parts[1]/60+d.getSeconds()/3600,point.power_w]);
     }
-    const points=this._forecast ?? [...(this._hass?.states?.[this.config.forecast_entity]?.attributes?.points||[]),...(this._hass?.states?.[this.config.forecast_entity.replace(/today$/, 'tomorrow')]?.attributes?.points||[])];
+    const dayState=this._hass?.states?.[this.config.day_forecast_entity];
+    const expired=dayState?.state==='unavailable'&&dayState?.attributes?.weather_status==='stale';
+    const points=expired?[]:(this._forecast ?? [...(this._hass?.states?.[this.config.forecast_entity]?.attributes?.points||[]),...(this._hass?.states?.[this.config.forecast_entity.replace(/today$/, 'tomorrow')]?.attributes?.points||[])]);
     const forecast=points.filter(p=>Number.isFinite(Date.parse(p.time)) && dayFmt.format(new Date(p.time))===today && p.power_w!==null).map(p=>{
       const d=new Date(p.time);
       const a=f.format(d).split(':').map(Number);
@@ -251,7 +253,7 @@ class SolarComparisonCard extends HTMLElement {
     const todayForecast=this._hass.states[this.config.day_forecast_entity];
     const weatherStatus=todayForecast?.attributes?.weather_status;
     const weatherUpdated=todayForecast?.attributes?.forecast_updated_at;
-    const allDays=todayForecast?.attributes?.daily_forecast||[];
+    const allDays=todayForecast?.state==='unavailable'&&weatherStatus==='stale'?[]:(todayForecast?.attributes?.daily_forecast||[]);
     const days=allDays.slice(0,this._forecastRange||8);
     const max=Math.max(1,...days.map(d=>Number(d.kwh)||0));
     const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
@@ -304,7 +306,7 @@ class SolarComparisonCard extends HTMLElement {
       <div class="chart-wrap ${this._view[1]-this._view[0]<24?'zoomed':''}">${this._period==='day'?this._svg():this._energySvg()}<div class="chart-tooltip"></div></div>
       <div class="legend">${['Предыдущий день','PV · факт','Прогноз'].map((label,i)=>`<button ${i===0&&this._period!=='day'?'hidden':''} data-toggle="${i}" aria-pressed="${this._visible[i]}" style="--series:${['#3478f6','#ff9e3d','#16a06a'][i]}"><span class="toggle"></span>${label}</button>`).join('')}</div>
       ${this._period==='day'&&!this._series.some(x=>x.length)?'<div class="empty">Нет данных за выбранную дату</div>':''}
-      ${weatherStatus==='stale'?'<div class="weather-warning" role="status" style="padding:12px;background:var(--warning-color,#ffb300);color:#212121;border-radius:8px">Не удалось обновить погоду: '+esc(todayForecast?.attributes?.last_refresh_error?.message||'причина не указана')+'. Показан предыдущий прогноз — данные устарели. Последняя загрузка: '+esc(weatherUpdated||'—')+'</div>':''}
+      ${weatherStatus==='stale'?'<div class="weather-warning" role="status" style="padding:12px;background:var(--warning-color,#ffb300);color:#212121;border-radius:8px">Не удалось обновить погоду: '+esc(todayForecast?.attributes?.last_refresh_error?.message||'причина не указана')+'. '+(todayForecast?.state==='unavailable'?'Срок действия предыдущего прогноза истёк.':'Показан предыдущий прогноз — данные устарели.')+' Последняя загрузка: '+esc(weatherUpdated||'—')+'</div>':''}
       ${this._loading?'<div class="small">Загрузка истории…</div>':''}
       <div class="forecast-head"><h3 class="more">Прогноз выработки на ${this._forecastRange===30?'30':'8'} дней <span class="unit">· кВт·ч</span></h3><div class="forecast-range"><button data-forecast-range="8" aria-pressed="${this._forecastRange!==30}">8 дней</button><button data-forecast-range="30" aria-pressed="${this._forecastRange===30}">Месяц</button></div></div>
       <div class="bars ${this._forecastRange===30?'month':''}">${days.map(d=>`<div class="day ${d.source==='ensemble'?'ensemble':''}" title="${d.source==='ensemble'?'Дальний ансамблевый прогноз — точность ниже':'Основной прогноз погоды'}"><b>${esc(d.kwh)} </b><div class="bar" style="height:${Math.max(2,100*(Number(d.kwh)||0)/max)}px"></div><span>${esc((d.date||'').slice(5))}</span></div>`).join('')}</div>
