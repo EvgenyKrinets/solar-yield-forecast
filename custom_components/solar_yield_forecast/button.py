@@ -37,9 +37,15 @@ class SolarYieldRecalculateButton(CoordinatorEntity, ButtonEntity):
         await self.coordinator.async_recalculate()
 
     @property
+    def available(self):
+        # Allow a manual retry after weather failures; disable only while busy.
+        return self.coordinator.recalculation.get('status')!='running'
+
+    @property
     def extra_state_attributes(self):
         values = self.coordinator.data or {}
         return {
+            'recalculation':values.get('recalculation',{}),
             "history_import": values.get("history_import", {}),
             "model_status": values.get("model_status"),
             "calibration_days": values.get("calibration_days"),

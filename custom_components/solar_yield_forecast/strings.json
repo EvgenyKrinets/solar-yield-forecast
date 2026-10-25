@@ -44,11 +44,10 @@
         "description": "Calculated panel groups:\n\n{groups}\n\n**Total: {panel_count} panels — {total_kwp} kWp**\n\nSubmit to save this system configuration."
       },
       "place": {
-        "title": "Find city",
-        "description": "Choose a country and enter at least 3 city letters. Next choose an exact result with coordinates.",
+        "title": "Choose country",
+        "description": "Type a country name and choose a match. Confirm to open the searchable city picker. The first use downloads the GeoNames city catalogue.",
         "data": {
-          "country": "Country",
-          "city_query": "City name"
+          "country": "Country"
         }
       },
       "city_result": {
@@ -64,6 +63,14 @@
         "description": "**{site_name}**\n\nLatitude: **{latitude}**\n\nLongitude: **{longitude}**\n\nTime zone: **{time_zone}**",
         "data": {
           "search_again": "Choose another city"
+        }
+      },
+      "city_picker": {
+        "title": "Choose city",
+        "description": "Type a city name to filter matches immediately. Each result includes coordinates and time zone. For small places outside the catalogue, type the full name and confirm to search. City coordinates refer to its centre; use manual mode for an exact roof position.\n\n{catalog_status}",
+        "data": {
+          "city": "City — start typing",
+          "search_again": "Change country"
         }
       }
     },
@@ -124,11 +131,10 @@
         "description": "Calculated panel groups:\n\n{groups}\n\n**Total: {panel_count} panels — {total_kwp} kWp**\n\nSubmit to apply the changes."
       },
       "place": {
-        "title": "Find city",
-        "description": "Choose a country and enter at least 3 city letters. Next choose an exact result with coordinates.",
+        "title": "Choose country",
+        "description": "Type a country name and choose a match. Confirm to open the searchable city picker. The first use downloads the GeoNames city catalogue.",
         "data": {
-          "country": "Country",
-          "city_query": "City name"
+          "country": "Country"
         }
       },
       "city_result": {
@@ -144,6 +150,14 @@
         "description": "**{site_name}**\n\nLatitude: **{latitude}**\n\nLongitude: **{longitude}**\n\nTime zone: **{time_zone}**",
         "data": {
           "search_again": "Choose another city"
+        }
+      },
+      "city_picker": {
+        "title": "Choose city",
+        "description": "Type a city name to filter matches immediately. Each result includes coordinates and time zone. For small places outside the catalogue, type the full name and confirm to search. City coordinates refer to its centre; use manual mode for an exact roof position.\n\n{catalog_status}",
+        "data": {
+          "city": "City — start typing",
+          "search_again": "Change country"
         }
       }
     },
@@ -208,10 +222,22 @@
       "model_status": {
         "name": "Model status",
         "state": {
-          "ready": "Ready",
+          "ready": "Daily calibration and profile ready",
           "history_loaded": "History loaded; weather calibration pending",
           "collecting_history": "Collecting history",
-          "no_history": "No production history"
+          "no_history": "No production history",
+          "calibration_only": "Daily calibration ready; profile not trained",
+          "recalculating": "Recalculation running"
+        }
+      },
+      "recalculation_status": {
+        "name": "Recalculation status",
+        "state": {
+          "idle": "Not started",
+          "running": "Running",
+          "completed": "Recalculation completed",
+          "completed_with_warnings": "Completed with warnings",
+          "failed": "Recalculation failed"
         }
       }
     }

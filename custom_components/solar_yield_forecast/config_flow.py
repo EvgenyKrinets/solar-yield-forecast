@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from aiohttp import ClientError, ClientTimeout
 import asyncio
+from zipfile import BadZipFile
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import voluptuous as vol
@@ -14,6 +15,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .geocoding import normalized_locations, location_label
 from .const import API_GEOCODING
+from .city_catalog import async_city_catalog
 
 from .const import (
     CONF_ADD_ANOTHER,
@@ -163,6 +165,15 @@ class CityLocationFlow:
         errors = {}
         if user_input is not None:
             self._place_query = user_input
+            if 'city_query' not in user_input:
+                self._catalog_error = False
+                try:
+                    catalog = await async_city_catalog(self.hass)
+                    self._catalog_places = {p['key']:p for p in catalog.get(user_input['country'].upper(),[])}
+                except (ClientError, asyncio.TimeoutError, ValueError, BadZipFile, KeyError, UnicodeError):
+                    self._catalog_places = {}
+                    self._catalog_error = True
+                return await self.async_step_city_picker()
             try:
                 params = {'name':user_input['city_query'].strip(), 'count':100,
                           'countryCode':user_input['country'].upper(),
@@ -182,8 +193,34 @@ class CityLocationFlow:
         previous = getattr(self, '_place_query', {})
         return self.async_show_form(step_id='place', errors=errors, data_schema=vol.Schema({
             vol.Required('country', default=previous.get('country', '')):selector.CountrySelector(),
-            vol.Required('city_query', default=previous.get('city_query', '')):selector.TextSelector(),
         }))
+
+    async def async_step_city_picker(self, user_input=None):
+        if user_input is not None:
+            if user_input.get('search_again'):
+                return await self.async_step_place()
+            place = self._catalog_places.get(user_input['city'])
+            if place is not None:
+                self._places = {place['key']:place}
+                return await self.async_step_city_result({'city':place['key']})
+            # Custom values cover villages or localized spellings not included
+            # in the major-city catalogue. Never guess their coordinates.
+            return await self.async_step_place({
+                'country':self._place_query['country'],'city_query':user_input['city']})
+        options=[]
+        for place in self._catalog_places.values():
+            aliases=' / '.join(place.get('aliases',[]))
+            label=location_label(place)+(f' · {aliases}' if aliases else '')
+            options.append({'value':place['key'],'label':label})
+        return self.async_show_form(step_id='city_picker',
+            description_placeholders={'catalog_status':
+                'GeoNames unavailable — Open-Meteo name search remains available.' if self._catalog_error
+                else 'GeoNames cities15000 · CC BY 4.0 · https://www.geonames.org/'},
+            data_schema=vol.Schema({
+                vol.Required('city'):selector.SelectSelector(selector.SelectSelectorConfig(
+                    options=options,custom_value=True,mode=selector.SelectSelectorMode.DROPDOWN)),
+                vol.Optional('search_again',default=False):selector.BooleanSelector(),
+            }))
 
     async def async_step_city_result(self, user_input=None):
         if user_input is not None:

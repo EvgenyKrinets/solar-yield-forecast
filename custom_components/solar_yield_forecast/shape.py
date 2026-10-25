@@ -31,19 +31,41 @@ def interval_shape(start, seconds, factors):
     return total / seconds
 
 def power_hours(states, end, interval=3600):
-    """Integrate held states in UTC; missing/invalid states break coverage."""
+    """Integrate held states; bridge bounded invalid gaps just like the chart.
+
+    Only gaps bracketed by finite readings and lasting <=600 seconds are
+    interpolated. Longer, leading and trailing gaps remain missing.
+    """
     rows = sorted(states, key=lambda x: x[0])
     bins = defaultdict(lambda: [0.0, 0.0])
-    for i, (stamp, value) in enumerate(rows):
-        stop = min(rows[i+1][0] if i+1<len(rows) else end, end)
-        if value is None or not isfinite(value) or value < 0:
-            continue
+    def valid(value):
+        return value is not None and isfinite(value) and value >= 0
+    def add(stamp, stop, first, last):
+        start, duration = stamp, stop-stamp
         while stamp < stop:
             bucket = int(stamp // interval) * interval
             until = min(stop, bucket + interval)
-            bins[bucket][0] += value * (until-stamp) / 3600
+            a = (stamp-start)/duration
+            b = (until-start)/duration
+            mean = first+(last-first)*(a+b)/2
+            bins[bucket][0] += mean * (until-stamp) / 3600
             bins[bucket][1] += until-stamp
             stamp = until
+    i = 0
+    while i < len(rows):
+        stamp,value = rows[i]
+        if valid(value):
+            add(stamp,min(rows[i+1][0] if i+1<len(rows) else end,end),value,value)
+        else:
+            last_invalid = i
+            while last_invalid+1<len(rows) and not valid(rows[last_invalid+1][1]):
+                last_invalid += 1
+            if i>0 and last_invalid+1<len(rows):
+                next_stamp,next_value=rows[last_invalid+1]
+                if valid(rows[i-1][1]) and next_stamp-stamp<=600 and next_stamp<=end:
+                    add(stamp,next_stamp,rows[i-1][1],next_value)
+            i=last_invalid
+        i+=1
     return dict(bins)
 
 
@@ -66,6 +88,7 @@ def learn_site_profile(bins, weather, factor, today, tz):
             actual, coverage = bins.get(stamp, (0, 0))
             by_day[day].append((stamp, max(0, row['kw'] * factor), actual, coverage))
     valid = {}
+    day_diagnostics = {}
     for day, rows in by_day.items():
         peak = max((r[1] for r in rows), default=0)
         daylight = [r for r in rows if r[1] >= peak*.03 and r[1] > 0]
@@ -73,12 +96,19 @@ def learn_site_profile(bins, weather, factor, today, tz):
         covered = [r for r in daylight if r[3] >= 885]
         # Reject partial commissioning days and Recorder outages, rather than
         # learning their missing energy as afternoon shading.
-        if (len(covered) < 24 or not expected or
-                sum(r[1] for r in covered) < expected*.97):
+        coverage = sum(r[1] for r in covered)/expected if expected else 0
+        reason = ('no_daylight_weather' if not expected else
+                  'too_few_covered_intervals' if len(covered)<24 else
+                  'incomplete_power_coverage' if coverage<.97 else None)
+        day_diagnostics[day] = {'status':'excluded' if reason else 'eligible',
+            'reason':reason, 'daylight_intervals':len(daylight),
+            'covered_intervals':len(covered), 'energy_weighted_coverage_percent':round(coverage*100,2)}
+        if reason:
             continue
         actual = sum(r[2] for r in covered)
         predicted = sum(r[1]*.25 for r in covered)
         if actual <= 0 or not .45 <= actual/predicted <= 1.55:
+            day_diagnostics[day].update(status='excluded',reason='actual_model_energy_ratio_out_of_range')
             continue
         valid[day] = covered
     clear, scores, _ = clear_weather_days(weather, today, tz)
@@ -89,14 +119,17 @@ def learn_site_profile(bins, weather, factor, today, tz):
     report = {'status':'insufficient_history', 'algorithm':'site_residual_15min_v2',
               'history_mode':'clear_weather_profile' if use_clear else 'all_weather_profile',
               'available_days':len(valid), 'clear_weather_days':len(clear_days),
-              'selected_profile_days':len(days), 'validation_days':validation_count,
-              'training_days':max(0,len(days)-validation_count),
+              'selected_profile_days':len(days), 'validation_days':0,
+              'training_days':0, 'candidate_training_days':max(0,len(days)-validation_count),
+              'candidate_validation_days':validation_count, 'fit_performed':False,
+              'day_diagnostics':day_diagnostics, 'interpolation_max_gap_minutes':10,
               'resolution_minutes':15, 'weather_always_applied':True,
               'metric':'Held-out 15-minute energy WAPE; retrospective, not day-ahead accuracy',
               'clear_day_weather':{day:scores[day] for day in clear_days[-10:]}}
     if len(days) < (3 if use_clear else 7):
         return {}, report
     train, test = days[:-validation_count], days[-validation_count:]
+    report.update(training_days=len(train),validation_days=len(test),fit_performed=True)
     support = defaultdict(list)
     for day in train:
         rows = valid[day]
@@ -109,6 +142,7 @@ def learn_site_profile(bins, weather, factor, today, tz):
     raw = {q:max(.35,min(1.75,median(values))) for q,values in support.items()
            if len(values) >= minimum}
     if len(raw) < 20:
+        report['status']='insufficient_interval_support'
         return {}, report
     # Thirty-minute smoothing removes cloud spikes but retains broad morning /
     # afternoon bias. No hard-coded peak, country, orientation or system size.

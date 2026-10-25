@@ -44,3 +44,22 @@ async def test_home_city_manual_selector_and_options_start(hass, enable_custom_i
     result=await hass.config_entries.options.async_configure(result['flow_id'],
         {'location_method':'city','daily_sensor':'sensor.energy','dc_power_sensor':'sensor.power'})
     assert result['step_id']=='place'
+
+
+async def test_city_picker_is_searchable_with_coordinates_and_country_scope(hass, enable_custom_integrations):
+    from custom_components.solar_yield_forecast.config_flow import SolarYieldConfigFlow
+    flow=SolarYieldConfigFlow();flow.hass=hass
+    flow._site={'daily_sensor':'sensor.energy','dc_power_sensor':'sensor.power'}
+    place={'key':'295277','name':'Dimona','latitude':31.07079,'longitude':35.03269,
+           'time_zone':'Asia/Jerusalem','country_code':'IL','country':'IL','admin1':'01','aliases':['Димона','דימונה']}
+    with patch('custom_components.solar_yield_forecast.config_flow.async_city_catalog',AsyncMock(return_value={'IL':[place],'US':[]})):
+        result=await flow.async_step_place({'country':'IL'})
+    assert result['step_id']=='city_picker'
+    selected=result['data_schema']({'city':'295277'})
+    city_selector=next(v for k,v in result['data_schema'].schema.items() if str(k)=='city')
+    assert city_selector.config['custom_value'] is True
+    assert '31.07079' in city_selector.config['options'][0]['label']
+    assert 'Димона' in city_selector.config['options'][0]['label']
+    result=await flow.async_step_city_picker(selected)
+    assert result['step_id']=='city_confirm'
+    assert flow._site['latitude']==31.07079

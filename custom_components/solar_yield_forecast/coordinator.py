@@ -5,6 +5,7 @@ from functools import partial
 from .shape import interval_shape, power_hours, learn_site_profile
 import logging
 import math
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import json
@@ -16,6 +17,7 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
 from .const import (CONF_PANEL_GROUPS, CONF_TIME_ZONE, DOMAIN, PANEL_GROUPS, API_ARCHIVE, API_ENSEMBLE, API_FORECAST, DEFAULT_DAILY_SENSOR, DEFAULT_DC_SENSOR, TIMEZONE)
 from .model import (combine_weather, calibration, daily_shape_normalizers, day_of_hour,
                     forecast_summary, open_meteo_azimuth, merge_quarter_hourly,
@@ -60,6 +62,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self._unsub_energy = None
         self.history_import = {"status": "not_started", "days": 0}
         self._recalculate_lock = asyncio.Lock()
+        self._model_update_lock = asyncio.Lock()
+        self.recalculation = {'status':'idle','stage':None}
+        self._archive_error = None
 
     async def async_initialize(self):
         seed_path = Path(__file__).with_name("daily_seed.json")
@@ -159,19 +164,79 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
 
     async def async_recalculate(self):
         """Manually re-import history and rebuild every adaptive layer."""
+        if self._recalculate_lock.locked():
+            raise HomeAssistantError('Model recalculation is already running')
         async with self._recalculate_lock:
-            self.history_import = {**self.history_import, "status": "recalculating"}
-            self.archive_last_attempt = None
-            self.ensemble_last_attempt = None
-            self._shape_day = None
-            await self.async_import_daily_history(force=True)
-            await self.async_request_refresh()
-            self.history_import = {
-                **self.history_import,
-                "status": "completed",
-                "recalculated_at": datetime.now(timezone.utc).isoformat(),
-            }
-            self.async_set_updated_data(self._build_data())
+            started = time.monotonic()
+            self.recalculation = {'status':'running','stage':'history',
+                'started_at':datetime.now(timezone.utc).isoformat()}
+            self._publish_recalculation()
+            try:
+                self.archive_last_attempt = None
+                self.ensemble_last_attempt = None
+                self._shape_day = None
+                await self.async_import_daily_history(force=True)
+                # async_request_refresh may return while a debounce timer is
+                # pending. Manual completion must await an actual refresh.
+                await self.async_refresh()
+                if not self.last_update_success:
+                    raise HomeAssistantError(str(self.last_exception or 'Forecast refresh failed'))
+                warnings = []
+                if self.history_import.get('status') in ('error','recorder_unavailable'):
+                    warnings.append('production_history_unavailable')
+                if self._archive_error:
+                    warnings.append('archive_weather_unavailable')
+                if (self.shape_report.get('status') in ('history_error','recorder_unavailable')
+                    or self.shape_report.get('latest_candidate_status')=='history_error'):
+                    warnings.append('power_history_unavailable')
+                self.recalculation.update(status='completed_with_warnings' if warnings else 'completed',
+                    stage='finished',warnings=warnings,shape_status=self.shape_report.get('status'),
+                    eligible_profile_days=self.shape_report.get('available_days',0))
+            except asyncio.CancelledError:
+                self.recalculation.update(status='failed',stage='cancelled',error='Recalculation cancelled')
+                raise
+            except Exception as exc:
+                self.recalculation.update(status='failed',error=str(exc))
+                raise HomeAssistantError(f'Model recalculation failed: {exc}') from exc
+            finally:
+                self.recalculation.update(finished_at=datetime.now(timezone.utc).isoformat(),
+                    duration_seconds=round(time.monotonic()-started,2))
+                self._publish_recalculation()
+
+    def _publish_recalculation(self, stage=None):
+        if stage is not None and self.recalculation.get('status')!='running':
+            return
+        if stage is not None and self.recalculation.get('status')=='running':
+            self.recalculation['stage']=stage
+        if self.data is not None:
+            # Progress is not new forecast data: do not reset the refresh timer,
+            # cancel debounce work or hide last_update_success=False on failure.
+            self.data = {**self.data, 'recalculation':dict(self.recalculation),
+                'recalculation_status':self.recalculation['status'],
+                'model_status':self._model_status()}
+            self.async_update_listeners()
+        if 'persistent_notification' in self.hass.config.components:
+            from homeassistant.components import persistent_notification
+            status=self.recalculation['status']
+            message=(f"Status: {status}\n\nStage: {self.recalculation.get('stage')}"
+                     f"\n\nDuration: {self.recalculation.get('duration_seconds','…')} s")
+            if status!='running':
+                message += (f"\n\nProfile: {self.shape_report.get('status')}"
+                            f"\n\nEligible profile days: {self.shape_report.get('available_days',0)}")
+            if self.recalculation.get('error'):
+                message += f"\n\n{self.recalculation['error']}"
+            persistent_notification.async_create(self.hass,message,
+                title='Solar Yield Forecast — model recalculation',
+                notification_id=f'solar_yield_forecast_recalculate_{self.entry.entry_id}')
+
+    def _model_status(self):
+        if self.recalculation.get('status')=='running':
+            return 'recalculating'
+        if self.cal_days>=3:
+            return 'ready' if self.shape_factors else 'calibration_only'
+        if len(self.actuals)>=3:
+            return 'history_loaded'
+        return 'collecting_history' if self.actuals else 'no_history'
 
     def _shape_signature(self):
         """Invalidate a learned profile only when the physical system changes."""
@@ -289,6 +354,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         if archive_start > archive_end:
             return
         try:
+            self._archive_error = None
             self.archive_rows = await self._get_groups(API_ARCHIVE, {
                 "start_date": archive_start.isoformat(),
                 "end_date": archive_end.isoformat(),
@@ -297,6 +363,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 self.actuals, self.archive_rows, today.isoformat(), self.tz
             )
         except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
+            self._archive_error = str(exc) or type(exc).__name__
             _LOGGER.warning("Historical Open-Meteo unavailable; keeping calibration: %s", exc)
 
     def _actual_today(self, now):
@@ -365,6 +432,8 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             self.shape_factors, tz=self.tz, today_scale=live_scale,
         )
         result.update({
+            'recalculation':dict(self.recalculation),
+            'recalculation_status':self.recalculation['status'],
             "factor_percent": round(self.factor * 100, 1),
             "calibration_days": self.cal_days,
             "training_error": self.training_error,
@@ -375,11 +444,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "shape_profile_updated_at": self.shape_profile_updated_at,
             "live_correction_samples": live_samples,
             "history_import": self.history_import,
-            "model_status": (
-                "ready" if self.cal_days >= 3 else
-                "history_loaded" if len(self.actuals) >= 3 else
-                "collecting_history" if self.actuals else "no_history"
-            ),
+            'model_status':self._model_status(),
             "site": {
                 "name": self.config.get("site_name", self.entry.title),
                 "latitude": self.config.get(CONF_LATITUDE),
@@ -396,14 +461,22 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         return result
 
     async def _async_update_data(self):
+        async with self._model_update_lock:
+            return await self._async_fetch_model()
+
+    async def _async_fetch_model(self):
         try:
             now = datetime.now(timezone.utc)
+            self._publish_recalculation('archive_weather')
             await self._maybe_refresh_archive(now)
             # Thirty retrospective days feed robust shape learning. The regular
             # API supplies the accurate first 16 days; GFS ensemble extends the
             # daily estimate to one month.
+            self._publish_recalculation('forecast_weather')
             self.forecast_rows = await self._get_groups(API_FORECAST, {"forecast_days": 16, "past_days": 30, "minutely_15": "global_tilted_irradiance,temperature_2m,wind_speed_10m"})
+            self._publish_recalculation('long_range_weather')
             await self._maybe_refresh_ensemble(now)
+            self._publish_recalculation('profile_training')
             await self._learn_shape(now)
             return self._build_data()
         except (ClientError, asyncio.TimeoutError, ValueError, KeyError) as exc:
