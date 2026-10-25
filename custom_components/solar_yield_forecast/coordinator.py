@@ -2,7 +2,7 @@
 from __future__ import annotations
 import asyncio
 from functools import partial
-from .shape import interval_shape, power_hours, learn_shape
+from .shape import interval_shape, power_hours, learn_site_profile
 import logging
 import math
 from datetime import datetime, timedelta, timezone
@@ -19,7 +19,7 @@ from homeassistant.core import callback
 from .const import (CONF_PANEL_GROUPS, CONF_TIME_ZONE, DOMAIN, PANEL_GROUPS, API_ARCHIVE, API_ENSEMBLE, API_FORECAST, DEFAULT_DAILY_SENSOR, DEFAULT_DC_SENSOR, TIMEZONE)
 from .model import (combine_weather, calibration, daily_shape_normalizers, day_of_hour,
                     forecast_summary, open_meteo_azimuth, merge_quarter_hourly,
-                    recent_live_scale)
+                    recent_live_scale, quarter_weather_rows)
 from .history import daily_energy_maxima
 _LOGGER = logging.getLogger(__name__)
 
@@ -84,13 +84,23 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             data.get("history_import", self.history_import)
             if same_energy_source else {"status": "not_started", "days": 0}
         )
-        self.live_comparisons = data.get("live_comparisons", [])[-5000:]
+        try:
+            old_system = json.loads(data.get('shape_signature') or '{}')
+        except (ValueError, TypeError):
+            old_system = {}
+        self.live_comparisons = (
+            data.get("live_comparisons", [])[-5000:]
+            if old_system.get('power_sensor') == self.config.get('dc_power_sensor',DEFAULT_DC_SENSOR)
+            and old_system.get('groups') == self.groups else []
+        )
         if data.get("shape_signature") == self._shape_signature():
             try:
                 stored_shape = {
                     str(hour): float(value)
                     for hour, value in data.get("shape_factors", {}).items()
-                    if 0 <= int(hour) <= 23 and 0.5 <= float(value) <= 1.5
+                    if ((str(hour).startswith('q') and 0 <= int(str(hour)[1:]) < 96)
+                        or (str(hour).isdigit() and 0 <= int(hour) < 24))
+                    and 0.3 <= float(value) <= 1.8
                 }
             except (TypeError, ValueError):
                 stored_shape = {}
@@ -166,7 +176,10 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
     def _shape_signature(self):
         """Invalidate a learned profile only when the physical system changes."""
         return json.dumps({
+            "profile_version": 2,
             "power_sensor": self.config.get("dc_power_sensor", DEFAULT_DC_SENSOR),
+            "latitude": self.config.get(CONF_LATITUDE),
+            "longitude": self.config.get(CONF_LONGITUDE),
             "groups": self.groups,
             "time_zone": self.time_zone,
         }, sort_keys=True, separators=(",", ":"))
@@ -201,10 +214,10 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         if base == API_FORECAST:
             try:
                 quarters = combine_weather(responses, self.groups, section="minutely_15", interval_seconds=900)
-                return merge_quarter_hourly(hourly, quarters)
+                return quarter_weather_rows(merge_quarter_hourly(hourly, quarters))
             except ValueError:
                 _LOGGER.warning("Incomplete 15-minute forecast; using hourly means")
-        return hourly
+        return quarter_weather_rows(hourly) if base == API_FORECAST else hourly
 
     @staticmethod
     def _ensemble_mean(response):
@@ -433,8 +446,8 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                         states.append((stamp, value))
                 except (KeyError, TypeError, ValueError):
                     continue
-            hours = await self.hass.async_add_executor_job(power_hours, states, now.timestamp())
-            candidate, report = learn_shape(hours, self._hourly_weather, self.factor, today, self.tz)
+            hours = await self.hass.async_add_executor_job(power_hours, states, now.timestamp(), 900)
+            candidate, report = learn_site_profile(hours, self.forecast_rows, self.factor, today, self.tz)
             if candidate:
                 self.shape_factors = candidate
                 self.shape_profile_updated_at = now.isoformat()

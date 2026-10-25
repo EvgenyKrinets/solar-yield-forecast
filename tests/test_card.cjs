@@ -129,6 +129,6 @@ test('sidebar application exposes integration settings to administrators',()=>{
  assert.match(source,/\/config\/integrations\/integration\/solar_yield_forecast/);
  assert.match(source,/class="settings action"/);
  assert.match(source,/settings\.hidden=!this\._hass\.user\?\.is_admin/);
- assert.match(source,/class="recalculate action"/);
- assert.match(source,/callService\('button','press'/);
+ assert.doesNotMatch(source,/class="recalculate action"/);
+ assert.doesNotMatch(source,/callService\('button','press'/);
 });

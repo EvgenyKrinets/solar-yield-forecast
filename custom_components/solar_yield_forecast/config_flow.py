@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from aiohttp import ClientError, ClientTimeout
+import asyncio
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import voluptuous as vol
@@ -9,6 +11,9 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.core import callback
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from .geocoding import normalized_locations, location_label
+from .const import API_GEOCODING
 
 from .const import (
     CONF_ADD_ANOTHER,
@@ -46,10 +51,11 @@ def _number(minimum, maximum, step=1, unit=None):
 def _location_schema(values):
     """Choose HA's configured home location or the explicit manual fallback."""
     return vol.Schema({
-        vol.Required(
-            CONF_MANUAL_COORDINATES,
-            default=bool(values.get(CONF_MANUAL_COORDINATES, False)),
-        ): selector.BooleanSelector(),
+        vol.Required('location_method', default=values.get('location_method',
+            'manual' if values.get(CONF_MANUAL_COORDINATES) else 'home')):
+            selector.SelectSelector(selector.SelectSelectorConfig(
+                options=['home', 'city', 'manual'], translation_key='location_method',
+                mode=selector.SelectSelectorMode.DROPDOWN)),
         vol.Required("daily_sensor", default=values.get("daily_sensor", DEFAULT_DAILY_SENSOR)):
             selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
         vol.Required("dc_power_sensor", default=values.get("dc_power_sensor", DEFAULT_DC_SENSOR)):
@@ -80,6 +86,8 @@ def _manual_location_schema(hass, values):
 def _site_from_home(hass, values):
     """Use the authoritative location already configured in Home Assistant."""
     return {
+        'location_method':'home',
+        CONF_MANUAL_COORDINATES:False,
         CONF_SITE_NAME: str(getattr(hass.config, "location_name", "Home") or "Home"),
         CONF_LATITUDE: float(hass.config.latitude),
         CONF_LONGITUDE: float(hass.config.longitude),
@@ -148,7 +156,66 @@ def _summary_placeholders(groups):
     }
 
 
-class SolarYieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class CityLocationFlow:
+    """Shared country + city search for installation and options, never country centroids."""
+
+    async def async_step_place(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            self._place_query = user_input
+            try:
+                params = {'name':user_input['city_query'].strip(), 'count':100,
+                          'countryCode':user_input['country'].upper(),
+                          'language':str(getattr(self.hass.config,'language','en') or 'en').split('-')[0]}
+                async with async_get_clientsession(self.hass).get(
+                    API_GEOCODING, params=params, timeout=ClientTimeout(total=20)
+                ) as response:
+                    response.raise_for_status()
+                    payload = await response.json()
+                self._places = {p['key']:p for p in normalized_locations(payload)
+                                if p['country_code']==params['countryCode']}
+                if self._places:
+                    return await self.async_step_city_result()
+                errors['base'] = 'city_not_found'
+            except (ClientError, asyncio.TimeoutError, ValueError):
+                errors['base'] = 'city_search_failed'
+        previous = getattr(self, '_place_query', {})
+        return self.async_show_form(step_id='place', errors=errors, data_schema=vol.Schema({
+            vol.Required('country', default=previous.get('country', '')):selector.CountrySelector(),
+            vol.Required('city_query', default=previous.get('city_query', '')):selector.TextSelector(),
+        }))
+
+    async def async_step_city_result(self, user_input=None):
+        if user_input is not None:
+            if user_input.get('search_again'):
+                return await self.async_step_place()
+            place = self._places.get(user_input['city'])
+            if place is None:
+                return await self.async_step_place()
+            self._site.update({CONF_SITE_NAME:place['name'],
+                CONF_LATITUDE:place['latitude'], CONF_LONGITUDE:place['longitude'],
+                CONF_TIME_ZONE:place['time_zone'], 'country':place['country_code'],
+                'location_method':'city', CONF_MANUAL_COORDINATES:True})
+            return await self.async_step_city_confirm()
+        return self.async_show_form(step_id='city_result', data_schema=vol.Schema({
+            vol.Required('city'):selector.SelectSelector(selector.SelectSelectorConfig(
+                options=[{'value':p['key'],'label':location_label(p)} for p in self._places.values()],
+                mode=selector.SelectSelectorMode.DROPDOWN)),
+            vol.Optional('search_again', default=False):selector.BooleanSelector(),
+        }))
+
+    async def async_step_city_confirm(self, user_input=None):
+        if user_input is not None:
+            if user_input.get('search_again'):
+                return await self.async_step_place()
+            return await self.async_step_group()
+        return self.async_show_form(step_id='city_confirm',
+            description_placeholders={key:str(self._site[key]) for key in
+                (CONF_SITE_NAME, CONF_LATITUDE, CONF_LONGITUDE, CONF_TIME_ZONE)},
+            data_schema=vol.Schema({vol.Optional('search_again',default=False):selector.BooleanSelector()}))
+
+
+class SolarYieldConfigFlow(CityLocationFlow, config_entries.ConfigFlow, domain=DOMAIN):
     """Configure a solar site without editing YAML or source files."""
 
     VERSION = 1
@@ -159,7 +226,11 @@ class SolarYieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None):
         if user_input is not None:
-            if user_input.get(CONF_MANUAL_COORDINATES):
+            if user_input.get('location_method') == 'city':
+                self._site = {key:user_input[key] for key in ('daily_sensor','dc_power_sensor')}
+                self._groups = []
+                return await self.async_step_place()
+            if user_input.get(CONF_MANUAL_COORDINATES) or user_input.get('location_method') == 'manual':
                 self._site = {
                     "daily_sensor": user_input["daily_sensor"],
                     "dc_power_sensor": user_input["dc_power_sensor"],
@@ -185,6 +256,7 @@ class SolarYieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors={CONF_TIME_ZONE: "invalid_time_zone"},
                 )
             self._site.update(user_input)
+            self._site.update(location_method='manual', manual_coordinates=True)
             self._groups = []
             return await self.async_step_group()
         return self.async_show_form(
@@ -227,7 +299,7 @@ class SolarYieldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return SolarYieldOptionsFlow()
 
 
-class SolarYieldOptionsFlow(config_entries.OptionsFlow):
+class SolarYieldOptionsFlow(CityLocationFlow, config_entries.OptionsFlow):
     """Edit the site and rebuild its panel groups from the UI."""
 
     def __init__(self):
@@ -244,7 +316,10 @@ class SolarYieldOptionsFlow(config_entries.OptionsFlow):
             self._existing = deepcopy(current.get(CONF_PANEL_GROUPS) or PANEL_GROUPS)
             self._groups = []
             self._index = 0
-            if user_input.get(CONF_MANUAL_COORDINATES):
+            if user_input.get('location_method') == 'city':
+                self._site = {key:user_input[key] for key in ('daily_sensor','dc_power_sensor')}
+                return await self.async_step_place()
+            if user_input.get(CONF_MANUAL_COORDINATES) or user_input.get('location_method') == 'manual':
                 self._site = {
                     "daily_sensor": user_input["daily_sensor"],
                     "dc_power_sensor": user_input["dc_power_sensor"],
@@ -269,6 +344,7 @@ class SolarYieldOptionsFlow(config_entries.OptionsFlow):
                     errors={CONF_TIME_ZONE: "invalid_time_zone"},
                 )
             self._site.update(user_input)
+            self._site.update(location_method='manual', manual_coordinates=True)
             return await self.async_step_group()
         return self.async_show_form(
             step_id="manual",

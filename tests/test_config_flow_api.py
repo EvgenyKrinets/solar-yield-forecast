@@ -74,8 +74,12 @@ def test_number_selectors_use_home_assistant_compatible_configuration() -> None:
 def test_home_assistant_location_is_default_and_manual_fallback_remains() -> None:
     source = CONFIG_FLOW.read_text(encoding="utf-8")
 
-    assert "selector.CountrySelector(" not in source
-    assert "API_GEOCODING" not in source
+    assert "selector.CountrySelector(" in source
+    assert "API_GEOCODING" in source
+    assert "async_step_city_result" in source
+    assert "async_step_city_confirm" in source
+    assert "place['latitude']" in source
+    assert "p['country_code']==params['countryCode']" in source
     assert "_site_from_home" in source
     assert "hass.config.latitude" in source
     assert "hass.config.longitude" in source
