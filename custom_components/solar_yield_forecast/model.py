@@ -111,7 +111,7 @@ def hourly_power_profile(hourly, tz=TZ):
             when = datetime.fromtimestamp(start.timestamp() + offset + 450, tz)
             profile.append({"time": when.isoformat(), "power_w": round(hour["kw"] * 1000),
                             "energy_kwh": round(hour["kw"] / 4, 5),
-                            "source": "open_meteo_15min" if seconds == 900 else "hourly_mean"})
+                            "source": hour.get('source', "open_meteo_15min" if seconds == 900 else "hourly_mean")})
     return profile
 
 
@@ -190,6 +190,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
             profile_by_day[date].append({
                 'start': datetime.fromtimestamp(start+offset, tz).isoformat(),
                 'kw': quarter_kw, 'interval_seconds': 900,
+                'source': row.get('resolution_source', 'open_meteo_15min' if seconds == 900 else 'hourly_mean'),
             })
         if date not in sums:
             continue
@@ -330,5 +331,6 @@ def quarter_weather_rows(rows):
         scale = 4*current/sum(values) if sum(values) else 0
         for q,value in enumerate(values):
             output.append({**row,'end':row['end']-2700+q*900,
-                           'interval_seconds':900,'kw':value*scale})
+                           'interval_seconds':900,'kw':value*scale,
+                           'resolution_source':'hourly_reconstructed'})
     return output
