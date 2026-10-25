@@ -5,6 +5,7 @@ from pathlib import Path
 
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN
@@ -12,9 +13,25 @@ from .coordinator import SolarYieldCoordinator
 
 PLATFORMS = ["sensor"]
 FRONTEND_URL = f"/api/{DOMAIN}/solar-comparison-card.js"
-FRONTEND_VERSION = "1.4.1"
+FRONTEND_VERSION = "1.4.2"
 PANEL_URL = "solar-yield-forecast"
-PANEL_TAG = "solar-yield-forecast-panel-v1-4-1"
+PANEL_TAG = "solar-yield-forecast-panel-v1-4-2"
+
+
+class SolarForecastProfileView(HomeAssistantView):
+    """Serve one requested profile without publishing every day as an entity attribute."""
+
+    url = f"/api/{DOMAIN}/profile/{{date}}"
+    name = f"api:{DOMAIN}:profile"
+    requires_auth = True
+
+    async def get(self, request, date):
+        hass = request.app["hass"]
+        coordinators = list((hass.data.get(DOMAIN) or {}).values())
+        if not coordinators:
+            return self.json({"date": date, "points": []}, status_code=404)
+        profiles = (coordinators[0].data or {}).get("power_profiles_by_date", {})
+        return self.json({"date": date, "points": profiles.get(date, [])})
 
 
 async def _async_reload_entry(hass, entry):
@@ -29,6 +46,7 @@ async def async_setup(hass, config):
         [StaticPathConfig(FRONTEND_URL, str(filepath), cache_headers=False)]
     )
     frontend.add_extra_js_url(hass, f"{FRONTEND_URL}?v={FRONTEND_VERSION}")
+    hass.http.register_view(SolarForecastProfileView)
     return True
 
 

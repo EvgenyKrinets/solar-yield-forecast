@@ -134,6 +134,7 @@ class SolarComparisonCard extends HTMLElement {
     };
     this._root = this.shadowRoot || this.attachShadow({mode: 'open'});
     this._history = null;
+    this._forecast = null;
     this._compact = this.config.size === 'compact';
     this._date = '';
     this._selected=solarDay(new Date());this._period='day';this._view=[0,24];this._visible=[true,true,true];this._forecastRange=8;
@@ -165,14 +166,23 @@ class SolarComparisonCard extends HTMLElement {
       const end = new Date(Math.min(Date.now(),solarMidnight(solarShift(this._selected,1),tz)));
       const start = new Date(solarMidnight(solarShift(this._selected,-1),tz));
       this._historyEnd=end.getTime();
-      if(start>=end){this._history=[];this._loading=false;this._render();return;}
-      const url = 'history/period/' + encodeURIComponent(start.toISOString()) +
+      const historyPromise=start<end ? this._hass.callApi('GET',
+        'history/period/' + encodeURIComponent(start.toISOString()) +
         '?filter_entity_id=' + encodeURIComponent(this.config.pv_entity) +
-        '&end_time=' + encodeURIComponent(end.toISOString()) + '&minimal_response';
-      const rows = await this._hass.callApi('GET', url);
+        '&end_time=' + encodeURIComponent(end.toISOString()) + '&minimal_response') : Promise.resolve([]);
+      const profilePromise=this._hass.callApi('GET','solar_yield_forecast/profile/'+encodeURIComponent(this._selected));
+      const [historyResult,profileResult] = await Promise.allSettled([historyPromise,profilePromise]);
       if(request!==this._request)return;
-      this._error = null;
-      this._history = Array.isArray(rows) ? (rows[0] || []) : [];
+      const errors=[];
+      if(historyResult.status==='fulfilled'){
+        const rows=historyResult.value;
+        this._history = Array.isArray(rows) ? (rows[0] || []) : [];
+      }else errors.push(historyResult.reason);
+      if(profileResult.status==='fulfilled'){
+        const profile=profileResult.value;
+        this._forecast = Array.isArray(profile?.points) ? profile.points : [];
+      }else errors.push(profileResult.reason);
+      this._error=errors.length ? errors.map(e=>e?.message||e?.body?.message||String(e)).join(' · ') : null;
     } catch (e) {
       if(request!==this._request)return;
       this._error = e?.message || e?.body?.message || (typeof e === 'string' ? e : 'Не удалось обновить историю. Повторная попытка через 5 минут.');
@@ -196,7 +206,7 @@ class SolarComparisonCard extends HTMLElement {
       const parts=f.format(d).split(':').map(Number);
       actual[idx].push([parts[0]+parts[1]/60+d.getSeconds()/3600,point.power_w]);
     }
-    const points=[...(this._hass?.states?.[this.config.forecast_entity]?.attributes?.points||[]),...(this._hass?.states?.[this.config.forecast_entity.replace(/today$/, 'tomorrow')]?.attributes?.points||[])];
+    const points=this._forecast ?? [...(this._hass?.states?.[this.config.forecast_entity]?.attributes?.points||[]),...(this._hass?.states?.[this.config.forecast_entity.replace(/today$/, 'tomorrow')]?.attributes?.points||[])];
     const forecast=points.filter(p=>Number.isFinite(Date.parse(p.time)) && dayFmt.format(new Date(p.time))===today && p.power_w!==null).map(p=>{
       const d=new Date(p.time);
       const a=f.format(d).split(':').map(Number);
@@ -334,7 +344,7 @@ class SolarComparisonCard extends HTMLElement {
   }
   _select(day, period=this._period){
     if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day)))return;
-    this._selected=day;this._period=period;this._view=[0,24];this._history=[];this._error=null;
+    this._selected=day;this._period=period;this._view=[0,24];this._history=[];this._forecast=null;this._error=null;
     this._request=(this._request||0)+1;this._loading=false;
     this._fetch();this._render();
   }
@@ -449,7 +459,7 @@ class SolarComparisonCompactCard extends SolarComparisonCard {
 }
 if(!customElements.get('solar-comparison-compact')) customElements.define('solar-comparison-compact', SolarComparisonCompactCard);
 
-const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-4-1';
+const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-4-2';
 const SOLAR_MANAGED_DASHBOARD='solar-yield-forecast-dashboard';
 
 function solarPanelCardConfig(config={}) {

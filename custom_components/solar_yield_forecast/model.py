@@ -45,9 +45,12 @@ def combine_weather(group_responses, groups=PANEL_GROUPS, section="hourly", inte
             raise ValueError(f"Missing radiation from Open-Meteo for {group['id']}")
         for i, stamp in enumerate(times):
             if _number(irradiances[i], None) is None:
-                if section == "minutely_15":
-                    continue
-                raise ValueError("Missing hourly irradiance")
+                # Open-Meteo can leave isolated retrospective or horizon-edge
+                # values null while the rest of the response is valid.  One
+                # absent interval must not take the whole config entry down.
+                # Only timestamps available for every orientation survive the
+                # final completeness filter below.
+                continue
             stamp = int(stamp)
             entry = results.setdefault(stamp, {"end": stamp, "interval_seconds": interval_seconds, "group_kw": {}, "kw": 0.0})
             kw = estimate_kw(irradiances[i], temps[i] if i < len(temps) else 25, winds[i] if i < len(winds) else 0, group)
@@ -142,14 +145,20 @@ def daily_shape_normalizers(forecast_rows, shape, tz=TZ):
         if raw > 0 and shaped > 0
     }
 
-def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forecast_days=30, tz=TZ, today_scale=1.0):
+def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forecast_days=30, tz=TZ, today_scale=1.0,
+                     profile_history_days=30):
     today = now.astimezone(tz).date()
     today_iso = today.isoformat()
     days = [(today + timedelta(days=i)).isoformat() for i in range(forecast_days)]
+    profile_days = [
+        (today + timedelta(days=i)).isoformat()
+        for i in range(-profile_history_days, forecast_days)
+    ]
     sums = {d: 0.0 for d in days}
     remaining = 0.0
     live_kw = 0.0
     by_day = {d: [] for d in days}
+    profile_by_day = {d: [] for d in profile_days}
     raw_by_day = {d: 0.0 for d in days}
     sources_by_day = {d: set() for d in days}
     cloud_by_day = {d: [0.0, 0.0] for d in days}
@@ -158,7 +167,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
     shape_normalizers = daily_shape_normalizers(forecast_rows, shape or {}, tz)
     for row in forecast_rows:
         date = day_of_hour(row["end"], row.get("interval_seconds", 3600), tz)
-        if date not in sums:
+        if date not in profile_by_day:
             continue
         end = int(row["end"])
         seconds = row.get("interval_seconds", 3600)
@@ -170,6 +179,13 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         # weather plus the learned installation shape.  A correction inferred
         # late in the day must not rewrite its morning or midday peak.
         calibrated_kw = max(0, row["kw"] * factor * shape_value / shape_mean)
+        profile_by_day[date].append({
+            "start": datetime.fromtimestamp(start, tz).isoformat(),
+            "kw": calibrated_kw,
+            "interval_seconds": seconds,
+        })
+        if date not in sums:
+            continue
         live_kw_value = calibrated_kw * today_scale if date == today_iso else calibrated_kw
         sources_by_day[date].add(row.get("forecast_source", "weather"))
         cloud = _number(row.get("cloud_cover"), None)
@@ -208,6 +224,11 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
                       "weather_mode": weather_mode, "cloud_cover_percent": cloud})
     power_profile_today = hourly_power_profile(by_day[today_iso], tz)
     power_profile_tomorrow = hourly_power_profile(by_day[days[1]], tz)
+    power_profiles_by_date = {
+        date: hourly_power_profile(rows, tz)
+        for date, rows in profile_by_day.items()
+        if rows
+    }
     return {
         "today": round(sums[today_iso], 1),
         "model_today": round(raw_by_day[today_iso], 1),
@@ -221,6 +242,7 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         "hourly_tomorrow": by_day[days[1]],
         "power_profile_today": power_profile_today,
         "power_profile_tomorrow": power_profile_tomorrow,
+        "power_profiles_by_date": power_profiles_by_date,
         "peak_today_kw": peak_kw_of_profile(power_profile_today),
         "peak_tomorrow_kw": peak_kw_of_profile(power_profile_tomorrow),
         "forecast_date_today": today_iso,

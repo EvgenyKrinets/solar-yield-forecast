@@ -60,6 +60,30 @@ def test_null_weather_is_not_zero_sunshine():
     assert combine_weather([response],[group], 'minutely_15',900)==[]
 
 
+def test_isolated_null_hour_does_not_reject_valid_forecast():
+    group={'id':'a','count':1,'kwp':1}
+    response={'hourly':{'time':[3600,7200,10800],
+                        'global_tilted_irradiance':[0,None,500]}}
+    rows=combine_weather([response],[group])
+    assert [row['end'] for row in rows]==[3600,10800]
+    assert rows[0]['kw']==0
+    assert rows[1]['kw']>0
+
+
+def test_profiles_are_available_for_past_and_future_selected_days():
+    now=datetime(2026,10,24,8,tzinfo=TZ)
+    rows=[]
+    for offset in (-2,0,3):
+        rows.append({'end':(now+timedelta(days=offset,hours=1)).timestamp(),
+                     'kw':5,'interval_seconds':3600})
+    result=forecast_summary(rows,1,None,now)
+    profiles=result['power_profiles_by_date']
+    assert (now-timedelta(days=2)).date().isoformat() in profiles
+    assert now.date().isoformat() in profiles
+    assert (now+timedelta(days=3)).date().isoformat() in profiles
+    assert all(len(points)==4 for points in profiles.values())
+
+
 def test_weather_metadata_survives_group_combination():
     group={'id':'a','count':1,'kwp':1}
     response={'hourly':{'time':[3600], 'global_tilted_irradiance':[500],

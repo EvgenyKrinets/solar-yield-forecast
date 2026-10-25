@@ -14,7 +14,7 @@ const fs=require('node:fs');
    const now=Date.now(), rows=[];
    for(let t=now-54*3600000;t<now;t+=60000)rows.push({last_changed:new Date(t).toISOString(),state:'4000'});
    const points=Array.from({length:216},(_,i)=>({time:new Date(now-54*3600000+i*900000).toISOString(),power_w:4500+3000*Math.sin(i/12)}));
-   const hass={states:{'sensor.total_dc_power':{attributes:{unit_of_measurement:'W'}},'sensor.solar_yield_forecast_today':{attributes:{daily_forecast:Array.from({length:30},(_,i)=>({date:new Date(Date.UTC(2026,9,22+i)).toISOString().slice(0,10),kwh:100+i,source:i>=16?'ensemble':'weather'}))}},'sensor.solar_yield_forecast_power_profile_today':{attributes:{points:[{time:'invalid',power_w:null},...points]}}},callApi:async()=>[rows]};
+   const hass={states:{'sensor.total_dc_power':{attributes:{unit_of_measurement:'W'}},'sensor.solar_yield_forecast_today':{attributes:{daily_forecast:Array.from({length:30},(_,i)=>({date:new Date(Date.UTC(2026,9,22+i)).toISOString().slice(0,10),kwh:100+i,source:i>=16?'ensemble':'weather'}))}},'sensor.solar_yield_forecast_power_profile_today':{attributes:{points:[{time:'invalid',power_w:null},...points]}}},callApi:async(method,url)=>url.startsWith('solar_yield_forecast/profile/')?{points}:[rows]};
    window.fixture=hass;card.hass=hass;
  });
  for(const width of [360,850,1400]){

@@ -85,11 +85,22 @@ test('configured site timezone controls calendar boundaries',()=>{
 test('late history response cannot replace a newer selected date',async()=>{
  const Card=vm.runInContext('SolarComparisonCard',ctx),card=new Card();
  card.config={pv_entity:'sensor.pv'};card._period='day';card._selected='2026-10-20';card._render=()=>{};
- const pending=[];card._hass={states:{},callApi:()=>new Promise(resolve=>pending.push(resolve))};
+ const pending=[];card._hass={states:{},callApi:(method,url)=>url.startsWith('solar_yield_forecast/profile/')
+   ? Promise.resolve({points:[]}) : new Promise(resolve=>pending.push(resolve))};
  const first=card._fetch();card._selected='2026-10-21';const second=card._fetch();
  pending[1]([[{state:'2000'}]]);await second;
  pending[0]([[{state:'1000'}]]);await first;
  assert.equal(card._history[0].state,'2000');assert.equal(card._loading,false);
+});
+
+test('selected day fetch requests its calculated forecast profile',async()=>{
+ const Card=vm.runInContext('SolarComparisonCard',ctx),card=new Card(),calls=[];
+ card.config={pv_entity:'sensor.pv'};card._period='day';card._selected='2026-10-27';card._render=()=>{};
+ card._hass={states:{},callApi:async(method,url)=>{calls.push(url);return url.startsWith('solar_yield_forecast/profile/')
+   ? {points:[{time:'2026-10-27T12:00:00+02:00',power_w:5000}]} : [];}};
+ await card._fetch();
+ assert.ok(calls.includes('solar_yield_forecast/profile/2026-10-27'));
+ assert.equal(card._forecast[0].power_w,5000);
 });
 
 
