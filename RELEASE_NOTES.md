@@ -1,3 +1,16 @@
+## 1.4.4 — Installation-specific power shape, city selection and settings controls
+
+- Learn smooth 15-minute actual/model residual profiles from each installation's own power history. Prefer at least three provider-confirmed clear days; retain a conservative all-weather fallback only with sufficient history.
+- Always apply current weather. No Dimona-specific curve, fixed time shift, orientation override or shared learned factors.
+- Validate the same interpolated, daily-energy-normalized profile used by the chart on held-out completed days. Reject incomplete history, changed patterns and corrections that do not improve validation error.
+- Reconstruct hourly weather at interval centres while preserving every hourly energy total. Native 15-minute weather takes precedence.
+- Invalidate obsolete learned factors when the model, coordinates, source power sensor or panel configuration changes. Preserve compatible measured power history for retraining.
+- Keep **Recalculate model** as a configuration button on the integration device; remove it from the main sidebar application header.
+- Add English entity translations and readable fallback entity descriptions so unsupported server languages cannot collapse sensor names to just the city.
+- Restore explicit Home Assistant home / country-and-city search / manual-coordinate modes for both installation and options. City results show coordinates and time zone; the selected city's exact coordinates are confirmed before panel setup. No country-centre fallback.
+
+Update via HACS, restart Home Assistant, then open Settings → Devices & services → Solar Yield Forecast → device → **Recalculate model**. The new profile activates only after validation succeeds; inspect `shape_calibration` for status and held-out errors. Improved accuracy on an individual installation still requires verification against its own data. Historical curves are retrospective model reconstructions, not immutable day-ahead forecast snapshots.
+
 ## 1.4.3 — Existing-history bootstrap and manual recalculation
 
 - Import up to 46 days of the selected daily-yield sensor from Home Assistant

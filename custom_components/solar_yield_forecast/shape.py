@@ -6,11 +6,13 @@ from math import isfinite
 
 def shape_at(stamp, factors):
     """Interpolate UTC hourly corrections between hour centres, without steps."""
-    hour = (stamp / 3600 - .5) % 24
+    quarter = any(str(key).startswith('q') for key in factors)
+    step, count, prefix = (900, 96, 'q') if quarter else (3600, 24, '')
+    hour = (stamp / step - .5) % count
     left = int(hour)
     fraction = hour - left
-    a = factors.get(str(left), 1.0)
-    b = factors.get(str((left + 1) % 24), 1.0)
+    a = factors.get(prefix + str(left), 1.0)
+    b = factors.get(prefix + str((left + 1) % count), 1.0)
     return a + (b - a) * fraction
 
 
@@ -20,14 +22,15 @@ def interval_shape(start, seconds, factors):
         return 1.0
     end = start + seconds
     cursor, total = start, 0.0
+    step = 900 if any(str(key).startswith('q') for key in factors) else 3600
     while cursor < end:
-        boundary = (int((cursor - 1800) // 3600) + 1) * 3600 + 1800
+        boundary = (int((cursor - step/2) // step) + 1) * step + step/2
         stop = min(end, boundary)
         total += shape_at((cursor + stop) / 2, factors) * (stop - cursor)
         cursor = stop
     return total / seconds
 
-def power_hours(states, end):
+def power_hours(states, end, interval=3600):
     """Integrate held states in UTC; missing/invalid states break coverage."""
     rows = sorted(states, key=lambda x: x[0])
     bins = defaultdict(lambda: [0.0, 0.0])
@@ -36,12 +39,110 @@ def power_hours(states, end):
         if value is None or not isfinite(value) or value < 0:
             continue
         while stamp < stop:
-            bucket = int(stamp // 3600) * 3600
-            until = min(stop, bucket + 3600)
+            bucket = int(stamp // interval) * interval
+            until = min(stop, bucket + interval)
             bins[bucket][0] += value * (until-stamp) / 3600
             bins[bucket][1] += until-stamp
             stamp = until
     return dict(bins)
+
+
+def learn_site_profile(bins, weather, factor, today, tz):
+    """Learn installation-specific 15-minute residuals; weather always remains input.
+
+    Never copy a different roof's curve, shift weather in time, or use validation
+    days to fit. Compare the *same energy-normalized, interpolated correction*
+    that production applies, including unsupported intervals in the score.
+    """
+    by_day = defaultdict(list)
+    for row in weather:
+        seconds = row.get('interval_seconds', 3600)
+        start = row['end'] - seconds
+        day = datetime.fromtimestamp(start + seconds/2, tz).date().isoformat()
+        if day >= today:
+            continue
+        for offset in range(0, seconds, 900):
+            stamp = start + offset
+            actual, coverage = bins.get(stamp, (0, 0))
+            by_day[day].append((stamp, max(0, row['kw'] * factor), actual, coverage))
+    valid = {}
+    for day, rows in by_day.items():
+        peak = max((r[1] for r in rows), default=0)
+        daylight = [r for r in rows if r[1] >= peak*.03 and r[1] > 0]
+        expected = sum(r[1] for r in daylight)
+        covered = [r for r in daylight if r[3] >= 885]
+        # Reject partial commissioning days and Recorder outages, rather than
+        # learning their missing energy as afternoon shading.
+        if (len(covered) < 24 or not expected or
+                sum(r[1] for r in covered) < expected*.97):
+            continue
+        actual = sum(r[2] for r in covered)
+        predicted = sum(r[1]*.25 for r in covered)
+        if actual <= 0 or not .45 <= actual/predicted <= 1.55:
+            continue
+        valid[day] = covered
+    clear, scores, _ = clear_weather_days(weather, today, tz)
+    clear_days = sorted(set(valid) & clear)
+    use_clear = len(clear_days) >= 3
+    days = clear_days if use_clear else sorted(valid)
+    validation_count = 2 if len(days) >= 7 else 1
+    report = {'status':'insufficient_history', 'algorithm':'site_residual_15min_v2',
+              'history_mode':'clear_weather_profile' if use_clear else 'all_weather_profile',
+              'available_days':len(valid), 'clear_weather_days':len(clear_days),
+              'selected_profile_days':len(days), 'validation_days':validation_count,
+              'training_days':max(0,len(days)-validation_count),
+              'resolution_minutes':15, 'weather_always_applied':True,
+              'metric':'Held-out 15-minute energy WAPE; retrospective, not day-ahead accuracy',
+              'clear_day_weather':{day:scores[day] for day in clear_days[-10:]}}
+    if len(days) < (3 if use_clear else 7):
+        return {}, report
+    train, test = days[:-validation_count], days[-validation_count:]
+    support = defaultdict(list)
+    for day in train:
+        rows = valid[day]
+        scale = sum(r[2] for r in rows)/sum(r[1]*.25 for r in rows)
+        peak = max(r[1] for r in rows)
+        for stamp, predicted, actual, _ in rows:
+            if predicted >= peak*.08:
+                support[int(stamp//900)%96].append(actual/(predicted*.25*scale))
+    minimum = max(2, min(8, (len(train)*3+4)//5))
+    raw = {q:max(.35,min(1.75,median(values))) for q,values in support.items()
+           if len(values) >= minimum}
+    if len(raw) < 20:
+        return {}, report
+    # Thirty-minute smoothing removes cloud spikes but retains broad morning /
+    # afternoon bias. No hard-coded peak, country, orientation or system size.
+    smooth = {}
+    for q in raw:
+        pairs = [(raw[n%96], 3-abs(n-q)) for n in range(q-2,q+3) if n%96 in raw]
+        smooth[q] = sum(v*w for v,w in pairs)/sum(w for _,w in pairs)
+    ordered = sorted(smooth)
+    for _ in range(3):
+        for keys in (ordered, list(reversed(ordered))):
+            for left,right in zip(keys,keys[1:]):
+                if abs(right-left)==1:
+                    smooth[right]=max(smooth[left]-.06,min(smooth[left]+.06,smooth[right]))
+    factors = {'q'+str(q):round(value,6) for q,value in smooth.items()}
+    before = after = total = peak_before = peak_after = peak_total = 0
+    for day in test:
+        rows = valid[day]
+        adjusted = [p*interval_shape(t,900,factors) for t,p,_,_ in rows]
+        normalizer = sum(adjusted)/sum(r[1] for r in rows)
+        peak = max(r[1] for r in rows)
+        for (stamp,p,a,_),shaped in zip(rows,adjusted):
+            b, c = abs(a-p*.25), abs(a-shaped/normalizer*.25)
+            before += b; after += c; total += a
+            if p >= peak*.7:
+                peak_before += b; peak_after += c; peak_total += a
+    accepted = total > 0 and after < before*.95 and peak_after <= peak_before*1.02+1e-9
+    report.update(status='active' if accepted else 'no_validated_improvement',
+                  before_wape_percent=round(100*before/total,2),
+                  after_wape_percent=round(100*after/total,2),
+                  peak_before_wape_percent=round(100*peak_before/peak_total,2) if peak_total else None,
+                  peak_after_wape_percent=round(100*peak_after/peak_total,2) if peak_total else None,
+                  minimum_interval_support=minimum,
+                  factor_support_utc={str(q):len(support[q]) for q in raw})
+    return (factors if accepted else {}), report
 
 
 def clear_weather_days(weather, today, tz):

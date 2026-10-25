@@ -1,8 +1,9 @@
 """Manual controls for Solar Yield Forecast."""
 from __future__ import annotations
 
-from homeassistant.components.button import ButtonEntity
+from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.entity import EntityCategory
 
 from .const import DOMAIN
 
@@ -18,6 +19,8 @@ class SolarYieldRecalculateButton(CoordinatorEntity, ButtonEntity):
     _attr_has_entity_name = True
     _attr_translation_key = "recalculate_model"
     _attr_icon = "mdi:calculator-variant-outline"
+    _attr_entity_category = EntityCategory.CONFIG
+    entity_description = ButtonEntityDescription(key='recalculate_model', name='Recalculate model')
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator)

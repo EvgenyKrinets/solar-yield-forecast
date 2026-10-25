@@ -296,3 +296,25 @@ Released under the [MIT License](LICENSE).
 Built for real roofs, real weather and transparent Home Assistant automation.
 
 </div>
+# Model update — 1.4.4
+
+The adaptive profile is learned independently for each installation from its own
+15-minute PV power history. A continuous measured/model residual corrects the
+morning and afternoon shape; weather is always applied, and the daily energy
+calibration remains separate. Held-out completed days must show an improvement
+before a correction activates. Small roofs and large arrays use the same
+relative thresholds. With insufficient or unreliable history the weather model
+remains the safe fallback; no accuracy level is guaranteed.
+
+**Пересчитать модель / Recalculate model** is on the integration's device page
+under configuration controls, not on the main chart. The Settings button opens
+the integration. Existing entity IDs and user-assigned names remain unchanged.
+
+Location setup offers **Home Assistant home**, **Search country and city**, and
+**Manual coordinates**. For city search, enter the country and city name, select
+the exact result (including coordinates and time zone), then confirm its position.
+Search is submitted through the native Home Assistant wizard; it is not a
+live-updating map/autocomplete on one page. Coordinates never come from a country
+centroid. For a remote roof, use manual coordinates if the city centre is not
+precise enough. История графиков за прошлые дни — пересчёт модели по доступной
+погоде, а не сохранённый прогноз, выпущенный до наступления этого дня.

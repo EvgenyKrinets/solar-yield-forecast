@@ -182,11 +182,15 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         # weather plus the learned installation shape.  A correction inferred
         # late in the day must not rewrite its morning or midday peak.
         calibrated_kw = max(0, row["kw"] * factor * shape_value / shape_mean)
-        profile_by_day[date].append({
-            "start": datetime.fromtimestamp(start, tz).isoformat(),
-            "kw": calibrated_kw,
-            "interval_seconds": seconds,
-        })
+        # Apply the learned 15-minute shape at its native resolution, including
+        # hours where the weather provider offers only an hourly mean.
+        for offset in range(0, seconds, 900):
+            quarter_kw = max(0, row['kw'] * factor *
+                             interval_shape(start+offset, 900, shape or {}) / shape_mean)
+            profile_by_day[date].append({
+                'start': datetime.fromtimestamp(start+offset, tz).isoformat(),
+                'kw': quarter_kw, 'interval_seconds': 900,
+            })
         if date not in sums:
             continue
         live_kw_value = calibrated_kw * today_scale if date == today_iso else calibrated_kw
@@ -225,8 +229,8 @@ def forecast_summary(forecast_rows, factor, actual_today, now, shape=None, forec
         daily.append({"date": d, "kwh": round(sums[d], 1),
                       "source": "ensemble" if "ensemble" in sources_by_day[d] else "weather",
                       "weather_mode": weather_mode, "cloud_cover_percent": cloud})
-    power_profile_today = hourly_power_profile(by_day[today_iso], tz)
-    power_profile_tomorrow = hourly_power_profile(by_day[days[1]], tz)
+    power_profile_today = hourly_power_profile(profile_by_day[today_iso], tz)
+    power_profile_tomorrow = hourly_power_profile(profile_by_day[days[1]], tz)
     power_profiles_by_date = {
         date: hourly_power_profile(rows, tz)
         for date, rows in profile_by_day.items()
@@ -301,3 +305,30 @@ def merge_quarter_hourly(hourly, quarters):
         else:
             result.append(row)
     return result
+
+
+def quarter_weather_rows(rows):
+    """Reconstruct hourly means at quarter centres without changing hourly energy.
+
+    A provider's hourly radiation is an interval mean, not a point at the hour
+    boundary. Interpolate between interval centres, then preserve each original
+    hour's integral. Native quarter-hour data always wins unchanged.
+    """
+    ordered = sorted(rows, key=lambda r:r['end'])
+    output = []
+    for index,row in enumerate(ordered):
+        if row.get('interval_seconds',3600) != 3600:
+            output.append(row)
+            continue
+        current = max(0,row['kw'])
+        previous = ordered[index-1] if index else None
+        following = ordered[index+1] if index+1<len(ordered) else None
+        left = previous['kw'] if previous and previous['end']==row['end']-3600 and previous.get('interval_seconds',3600)==3600 else current
+        right = following['kw'] if following and following['end']==row['end']+3600 and following.get('interval_seconds',3600)==3600 else current
+        values = [max(0,current+(left-current)*.375), max(0,current+(left-current)*.125),
+                  max(0,current+(right-current)*.125), max(0,current+(right-current)*.375)]
+        scale = 4*current/sum(values) if sum(values) else 0
+        for q,value in enumerate(values):
+            output.append({**row,'end':row['end']-2700+q*900,
+                           'interval_seconds':900,'kw':value*scale})
+    return output

@@ -3,11 +3,11 @@
     "step": {
       "user": {
         "title": "Solar site",
-        "description": "Home Assistant location: **{home_name}** · {latitude}, {longitude} · {time_zone}. Keep manual location disabled to use these system settings.",
+        "description": "Home Assistant home: **{home_name}** · {latitude}, {longitude} · {time_zone}. Use home, search another city, or enter coordinates manually.",
         "data": {
-          "manual_coordinates": "Use a different location manually",
           "daily_sensor": "Daily PV yield sensor (kWh, resets each day)",
-          "dc_power_sensor": "Current PV power sensor (W or kW)"
+          "dc_power_sensor": "Current PV power sensor (W or kW)",
+          "location_method": "System location"
         }
       },
       "location": {
@@ -42,6 +42,29 @@
       "summary": {
         "title": "Check installed capacity",
         "description": "Calculated panel groups:\n\n{groups}\n\n**Total: {panel_count} panels — {total_kwp} kWp**\n\nSubmit to save this system configuration."
+      },
+      "place": {
+        "title": "Find city",
+        "description": "Choose a country and enter at least 3 city letters. Next choose an exact result with coordinates.",
+        "data": {
+          "country": "Country",
+          "city_query": "City name"
+        }
+      },
+      "city_result": {
+        "title": "Choose city",
+        "description": "Each result includes city, region, exact coordinates and time zone. Only the selected city supplies coordinates.",
+        "data": {
+          "city": "City and coordinates",
+          "search_again": "Change country or search"
+        }
+      },
+      "city_confirm": {
+        "title": "Confirm location",
+        "description": "**{site_name}**\n\nLatitude: **{latitude}**\n\nLongitude: **{longitude}**\n\nTime zone: **{time_zone}**",
+        "data": {
+          "search_again": "Choose another city"
+        }
       }
     },
     "abort": {
@@ -50,18 +73,20 @@
     "error": {
       "invalid_time_zone": "Enter a valid IANA time zone, for example Europe/Berlin.",
       "location_not_found": "No matching location was found in the selected country. Check the spelling or use manual coordinates.",
-      "geocoding_unavailable": "The location search service is temporarily unavailable. Try again or use manual coordinates."
+      "geocoding_unavailable": "The location search service is temporarily unavailable. Try again or use manual coordinates.",
+      "city_not_found": "No matching city. Check name and country.",
+      "city_search_failed": "Search unavailable. Retry or use manual coordinates."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Site and sensors",
-        "description": "Home Assistant location: **{home_name}** · {latitude}, {longitude} · {time_zone}. Keep manual location disabled to use these system settings.",
+        "description": "Home Assistant home: **{home_name}** · {latitude}, {longitude} · {time_zone}. Use home, search another city, or enter coordinates manually.",
         "data": {
-          "manual_coordinates": "Use a different location manually",
           "daily_sensor": "Daily PV yield sensor",
-          "dc_power_sensor": "Current PV power sensor"
+          "dc_power_sensor": "Current PV power sensor",
+          "location_method": "System location"
         }
       },
       "location": {
@@ -97,13 +122,38 @@
       "summary": {
         "title": "Check installed capacity",
         "description": "Calculated panel groups:\n\n{groups}\n\n**Total: {panel_count} panels — {total_kwp} kWp**\n\nSubmit to apply the changes."
+      },
+      "place": {
+        "title": "Find city",
+        "description": "Choose a country and enter at least 3 city letters. Next choose an exact result with coordinates.",
+        "data": {
+          "country": "Country",
+          "city_query": "City name"
+        }
+      },
+      "city_result": {
+        "title": "Choose city",
+        "description": "Each result includes city, region, exact coordinates and time zone. Only the selected city supplies coordinates.",
+        "data": {
+          "city": "City and coordinates",
+          "search_again": "Change country or search"
+        }
+      },
+      "city_confirm": {
+        "title": "Confirm location",
+        "description": "**{site_name}**\n\nLatitude: **{latitude}**\n\nLongitude: **{longitude}**\n\nTime zone: **{time_zone}**",
+        "data": {
+          "search_again": "Choose another city"
+        }
       }
     },
     "error": {
       "at_least_one_group": "At least one enabled panel group is required.",
       "invalid_time_zone": "Enter a valid IANA time zone, for example Europe/Berlin.",
       "location_not_found": "No matching location was found in the selected country. Check the spelling or use manual coordinates.",
-      "geocoding_unavailable": "The location search service is temporarily unavailable. Try again or use manual coordinates."
+      "geocoding_unavailable": "The location search service is temporarily unavailable. Try again or use manual coordinates.",
+      "city_not_found": "No matching city. Check name and country.",
+      "city_search_failed": "Search unavailable. Retry or use manual coordinates."
     }
   },
   "entity": {
@@ -113,20 +163,48 @@
       }
     },
     "sensor": {
-      "model_today": {"name": "Model today"},
-      "today": {"name": "Today"},
-      "tomorrow": {"name": "Tomorrow"},
-      "next_7_days": {"name": "Next 7 days"},
-      "next_30_days": {"name": "Next 30 days"},
-      "remaining_today": {"name": "Remaining today"},
-      "power_now": {"name": "Power now"},
-      "power_profile_today": {"name": "Power profile today"},
-      "power_profile_tomorrow": {"name": "Power profile tomorrow"},
-      "calibration_factor": {"name": "Calibration factor"},
-      "calibration_samples": {"name": "Calibration samples"},
-      "training_error": {"name": "Training error"},
-      "forward_error": {"name": "Forward forecast error"},
-      "forward_samples": {"name": "Forward forecast samples"},
+      "model_today": {
+        "name": "Model today"
+      },
+      "today": {
+        "name": "Today"
+      },
+      "tomorrow": {
+        "name": "Tomorrow"
+      },
+      "next_7_days": {
+        "name": "Next 7 days"
+      },
+      "next_30_days": {
+        "name": "Next 30 days"
+      },
+      "remaining_today": {
+        "name": "Remaining today"
+      },
+      "power_now": {
+        "name": "Power now"
+      },
+      "power_profile_today": {
+        "name": "Power profile today"
+      },
+      "power_profile_tomorrow": {
+        "name": "Power profile tomorrow"
+      },
+      "calibration_factor": {
+        "name": "Calibration factor"
+      },
+      "calibration_samples": {
+        "name": "Calibration samples"
+      },
+      "training_error": {
+        "name": "Training error"
+      },
+      "forward_error": {
+        "name": "Forward forecast error"
+      },
+      "forward_samples": {
+        "name": "Forward forecast samples"
+      },
       "model_status": {
         "name": "Model status",
         "state": {
@@ -135,6 +213,15 @@
           "collecting_history": "Collecting history",
           "no_history": "No production history"
         }
+      }
+    }
+  },
+  "selector": {
+    "location_method": {
+      "options": {
+        "home": "Home Assistant home",
+        "city": "Search country and city",
+        "manual": "Manual coordinates"
       }
     }
   }

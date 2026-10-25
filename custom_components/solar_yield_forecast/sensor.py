@@ -1,6 +1,6 @@
 """Lovelace and HA energy estimate sensors."""
 from __future__ import annotations
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass, SensorEntityDescription
 from homeassistant.const import UnitOfEnergy, UnitOfPower, PERCENTAGE
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -36,6 +36,9 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_has_entity_name = True
         self._attr_translation_key = key
+        # A readable fallback is essential if the server language has no
+        # integration translation. Never fall back to just the city/device name.
+        self.entity_description = SensorEntityDescription(key=key, name=label)
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = dev_class
         self._attr_state_class = None if dev_class == SensorDeviceClass.ENUM else SensorStateClass.MEASUREMENT
@@ -70,7 +73,7 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
                 "shape_factors_utc": values.get("shape_factors_utc", {}),
                 "shape_profile_updated_at": values.get("shape_profile_updated_at"),
                 "shape_energy_normalizers": values.get("shape_energy_normalizers", {}),
-                "forecast_method": "real_clear_day_profile_x_continuous_weather",
+                "forecast_method": "site_residual_15min_x_continuous_weather",
                 "live_scale_percent": values.get("live_scale_percent"),
                 "live_correction_samples": values.get("live_correction_samples"),
                 "forecast_baselines": values.get("forecast_baselines", {}),
