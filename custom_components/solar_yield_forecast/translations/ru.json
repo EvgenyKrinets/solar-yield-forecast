@@ -227,7 +227,9 @@
           "collecting_history": "Сбор истории",
           "no_history": "История выработки отсутствует",
           "calibration_only": "Суточная калибровка готова, форма ещё не обучена",
-          "recalculating": "Выполняется пересчёт"
+          "recalculating": "Выполняется пересчёт",
+          "weather_stale": "Погода не обновлена — предыдущий прогноз устарел",
+          "weather_unavailable": "Погодные данные недоступны"
         }
       },
       "recalculation_status": {

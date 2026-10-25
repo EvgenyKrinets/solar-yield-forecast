@@ -43,6 +43,16 @@ const fs=require('node:fs');
    await page.evaluate(()=>document.querySelector('solar-comparison-card').hass={...window.fixture});
    assert.equal(await page.locator('.chart-tooltip').evaluate(e=>e.style.display),'block');
  }
+ await page.evaluate(()=>{
+   const fixture=window.fixture;
+   const today=fixture.states['sensor.solar_yield_forecast_today'];
+   document.querySelector('solar-comparison-card').hass={...fixture,states:{...fixture.states,
+     'sensor.solar_yield_forecast_today':{...today,attributes:{...today.attributes,
+       weather_status:'stale',forecast_updated_at:'2026-10-25T12:00:00Z',last_refresh_error:{message:'HTTP 429 Too Many Requests'}}}}};
+ });
+ assert.match(await page.locator('.weather-warning').innerText(),/HTTP 429/);
+ await page.evaluate(()=>document.querySelector('solar-comparison-card').hass=window.fixture);
+ assert.equal(await page.locator('.weather-warning').count(),0);
  await page.evaluate(()=>document.querySelector('solar-comparison-card').setConfig({size:'compact'}));
  await page.waitForTimeout(100);
  assert.equal(await page.locator('svg').evaluate(e=>e.viewBox.baseVal.height),260);

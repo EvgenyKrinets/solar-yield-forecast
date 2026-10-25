@@ -5,6 +5,8 @@ from homeassistant.const import UnitOfEnergy, UnitOfPower, PERCENTAGE
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
+from .freshness import usable_forecast
+from datetime import datetime,timezone
 
 SENSORS = (
     ("model_today", "Model Today", "model_today", UnitOfEnergy.KILO_WATT_HOUR, None),
@@ -46,7 +48,8 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
         if dev_class == SensorDeviceClass.ENUM:
             self._attr_options = (['idle','running','completed','completed_with_warnings','failed']
                 if key=='recalculation_status' else
-                ['ready','calibration_only','recalculating','history_loaded','collecting_history','no_history'])
+                ['ready','calibration_only','recalculating','history_loaded','collecting_history','no_history',
+                 'weather_stale','weather_unavailable'])
         if key in {"calibration_factor", "calibration_samples", "training_error", "forward_error", "forward_samples", "model_status",'recalculation_status'}:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
         capacity = sum(float(group.get("kwp", 0)) for group in coordinator.groups)
@@ -57,13 +60,22 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
             "model": f"{capacity:.2f} kWp / {len(coordinator.groups)} orientations",
         }
     @property
+    def available(self):
+        if self.key in ('model_status','recalculation_status'):
+            return True
+        return super().available or usable_forecast(
+            self.coordinator.data,datetime.now(timezone.utc),self.coordinator.tz)
+
+    @property
     def native_value(self):
         return (self.coordinator.data or {}).get(self.field)
 
     @property
     def extra_state_attributes(self):
         values = self.coordinator.data or {}
-        attrs = {"forecast_updated_at": values.get("updated_at")}
+        attrs = {'forecast_updated_at':values.get('weather_updated_at') or values.get('updated_at'),
+            'weather_status':values.get('weather_status'),
+            'last_refresh_error':values.get('last_refresh_error')}
         if self.key in ('model_status','recalculation_status'):
             attrs['recalculation'] = values.get('recalculation',{})
         if self.key == "today":

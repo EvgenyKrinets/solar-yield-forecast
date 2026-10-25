@@ -227,7 +227,9 @@
           "collecting_history": "Collecting history",
           "no_history": "No production history",
           "calibration_only": "Daily calibration ready; profile not trained",
-          "recalculating": "Recalculation running"
+          "recalculating": "Recalculation running",
+          "weather_stale": "Weather update failed; previous forecast is stale",
+          "weather_unavailable": "Weather unavailable"
         }
       },
       "recalculation_status": {

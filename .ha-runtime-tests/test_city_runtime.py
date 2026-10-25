@@ -55,8 +55,10 @@ async def test_city_picker_is_searchable_with_coordinates_and_country_scope(hass
     with patch('custom_components.solar_yield_forecast.config_flow.async_city_catalog',AsyncMock(return_value={'IL':[place],'US':[]})):
         result=await flow.async_step_place({'country':'IL'})
     assert result['step_id']=='city_picker'
-    selected=result['data_schema']({'city':'295277'})
     city_selector=next(v for k,v in result['data_schema'].schema.items() if str(k)=='city')
+    option=city_selector.config['options'][0]
+    assert option['value']==option['label'] and option['value'].startswith('Dimona')
+    selected=result['data_schema']({'city':option['value']})
     assert city_selector.config['custom_value'] is True
     assert '31.07079' in city_selector.config['options'][0]['label']
     assert 'Димона' in city_selector.config['options'][0]['label']
