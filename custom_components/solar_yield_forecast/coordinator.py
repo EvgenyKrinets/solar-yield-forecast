@@ -2,7 +2,7 @@
 from __future__ import annotations
 import asyncio
 from functools import partial
-from .shape import interval_shape, power_hours, learn_site_profile
+from .shape import interval_shape, power_hours
 import logging
 import math
 import time
@@ -24,6 +24,8 @@ from .model import (combine_weather, calibration, daily_shape_normalizers, day_o
                     recent_live_scale, quarter_weather_rows)
 from .history import daily_energy_maxima
 from .freshness import usable_forecast
+from .robust import learn_profile
+from .power_archive import PowerArchive
 _LOGGER = logging.getLogger(__name__)
 
 class WeatherRequestError(ClientError):
@@ -75,6 +77,8 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.weather_updated_at = None
         self.weather_error = None
         self._active_update_stage = None
+        self.power_archive=PowerArchive()
+        self._last_store_schedule=None
 
     async def async_initialize(self):
         seed_path = Path(__file__).with_name("daily_seed.json")
@@ -83,6 +87,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         except (FileNotFoundError, ValueError, OSError) as exc:
             _LOGGER.debug("No bundled history: %s", exc)
         data = await self.store.async_load() or {}
+        now=datetime.now(timezone.utc).timestamp()
+        if data.get('power_archive_signature')==self._archive_signature():
+            self.power_archive=PowerArchive(data.get('power_archive'),now)
         daily_sensor = self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR)
         stored_sensor = data.get("actuals_sensor")
         same_energy_source = stored_sensor in (None, daily_sensor)
@@ -202,8 +209,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                     warnings.append('power_history_unavailable')
                 self.recalculation.update(status='completed_with_warnings' if warnings else 'completed',
                     stage='finished',warnings=warnings,shape_status=self.shape_report.get('status'),
-                    warning_details={'archive_weather':self._archive_error,
-                                     'history':self.history_import.get('error')},
+                    warning_details={key:value for key,value in {
+                        'archive_weather':self._archive_error,
+                        'history':self.history_import.get('error')}.items() if value},
                     eligible_profile_days=self.shape_report.get('available_days',0))
             except asyncio.CancelledError:
                 self.recalculation.update(status='failed',stage='cancelled',error='Recalculation cancelled')
@@ -216,6 +224,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 self.recalculation.update(finished_at=datetime.now(timezone.utc).isoformat(),
                     duration_seconds=round(time.monotonic()-started,2))
                 self._publish_recalculation()
+                self._persist(force=True)
 
     def _publish_recalculation(self, stage=None):
         if stage is not None:
@@ -239,6 +248,11 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             if status!='running':
                 message += (f"\n\nProfile: {self.shape_report.get('status')}"
                             f"\n\nEligible profile days: {self.shape_report.get('available_days',0)}")
+                active=self.shape_report.get('active_profile')
+                if active:
+                    message += (f"\n\nActive profile training days: {active.get('training_days')}"
+                        f"\n\nValidation days: {active.get('validation_days')}"
+                        f"\n\nCorrection confidence: {active.get('confidence_percent')}%")
             if self.recalculation.get('error'):
                 message += f"\n\n{self.recalculation['error']}"
                 failure=self.recalculation.get('failure',{})
@@ -266,13 +280,18 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
     def _shape_signature(self):
         """Invalidate a learned profile only when the physical system changes."""
         return json.dumps({
-            "profile_version": 2,
+            "profile_version": 3,
             "power_sensor": self.config.get("dc_power_sensor", DEFAULT_DC_SENSOR),
             "latitude": self.config.get(CONF_LATITUDE),
             "longitude": self.config.get(CONF_LONGITUDE),
             "groups": self.groups,
             "time_zone": self.time_zone,
         }, sort_keys=True, separators=(",", ":"))
+
+    def _archive_signature(self):
+        values=json.loads(self._shape_signature())
+        values.pop('profile_version',None)
+        return json.dumps(values,sort_keys=True,separators=(',',':'))
 
     async def _one_group(self, base, group, extras):
         params = {
@@ -394,11 +413,14 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         if self.archive_last_attempt is not None and (now - self.archive_last_attempt < timedelta(hours=20)):
             return
         self.archive_last_attempt = now
-        if not self.actuals:
+        if not self.actuals and not self.power_archive.bins:
             return
         today = now.astimezone(self.tz).date()
         archive_end = today - timedelta(days=5)
-        archive_start = max(today - timedelta(days=45), datetime.fromisoformat(min(self.actuals)).date())
+        earliest=(datetime.fromisoformat(min(self.actuals)).date() if self.actuals else today)
+        if self.power_archive.bins:
+            earliest=min(earliest,datetime.fromtimestamp(min(self.power_archive.bins),self.tz).date())
+        archive_start = max(today - timedelta(days=90), earliest)
         if archive_start > archive_end:
             return
         try:
@@ -418,16 +440,21 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         today = now.astimezone(self.tz).date().isoformat()
         return float(self.actuals[today]) if today in self.actuals else None
 
-    def _persist(self):
+    def _persist(self,force=False):
+        current=time.monotonic()
+        if not force and self._last_store_schedule is not None and current-self._last_store_schedule<180:
+            return
+        self._last_store_schedule=current
         self.store.async_delay_save(lambda: {
+            'power_archive':self.power_archive.snapshot(),
+            'power_archive_signature':self._archive_signature(),
             "actuals": self.actuals,
             "actuals_sensor": self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR),
             "history_import": self.history_import,
             "daily_baselines": self.daily_baselines,
             "daily_errors": self.daily_errors,
-            # Keep a private rolling power archive even when Recorder has a
-            # short purge window. About 5,000 five-minute daylight samples
-            # cover more than a month without touching ESP32/inverter storage.
+            # Short-term live comparisons are separate from the measured
+            # 90-day archive and are not treated as complete history coverage.
             "live_comparisons": self.live_comparisons[-5000:],
             # The installation's validated intraday geometry is stable across
             # Home Assistant restarts.  A configuration signature prevents a
@@ -436,7 +463,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "shape_report": self.shape_report,
             "shape_profile_updated_at": self.shape_profile_updated_at,
             "shape_signature": self._shape_signature(),
-        }, 180)
+        }, 1)
 
     def _update_scorecard(self, now, result):
         local = now.astimezone(self.tz)
@@ -474,6 +501,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
 
     def _build_data(self):
         now = datetime.now(timezone.utc)
+        self.power_archive.flush(now.timestamp())
         live_scale, live_samples = recent_live_scale(self.live_comparisons, now, self.tz)
         result = forecast_summary(
             self._combined_forecast_rows(), self.factor, self._actual_today(now), now,
@@ -493,6 +521,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "shape_calibration": self.shape_report,
             "shape_factors_utc": self.shape_factors,
             "shape_profile_updated_at": self.shape_profile_updated_at,
+            'power_archive':{'retention_days':90,'resolution_minutes':15,
+                'stored_intervals':len(self.power_archive.bins),
+                'first_interval':datetime.fromtimestamp(min(self.power_archive.bins),self.tz).isoformat() if self.power_archive.bins else None},
             "live_correction_samples": live_samples,
             "history_import": self.history_import,
             'model_status':self._model_status(),
@@ -549,44 +580,59 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         if self._shape_day == today:
             return
         self._shape_day = today
-        if "recorder" not in self.hass.config.components:
-            self.shape_report = {"status": "recorder_unavailable"}
-            return
         try:
-            from homeassistant.components.recorder import get_instance
-            from homeassistant.components.recorder.history import get_significant_states
             entity = self.config.get("dc_power_sensor", DEFAULT_DC_SENSOR)
-            history = await get_instance(self.hass).async_add_executor_job(partial(
-                get_significant_states, self.hass, now-timedelta(days=30), now,
-                entity_ids=[entity], significant_changes_only=False,
-                minimal_response=False, no_attributes=False))
-            states = []
-            for state in history.get(entity, []):
+            hours={};recorder_error=None
+            if 'recorder' in self.hass.config.components:
+                from homeassistant.components.recorder import get_instance
+                from homeassistant.components.recorder.history import get_significant_states
                 try:
-                    value = float(state.state)
-                    unit = state.attributes.get("unit_of_measurement", "").lower()
-                    value = value/1000 if unit == "w" else value if unit == "kw" else None
-                except (ValueError, TypeError):
-                    value = None
-                states.append((state.last_updated.timestamp(), value))
-            # Older self-recorded samples extend a short Recorder retention.
-            # Recorder values win when timestamps happen to match exactly.
-            known = {round(stamp, 3) for stamp, _ in states}
-            cutoff = (now-timedelta(days=30)).timestamp()
-            for sample in self.live_comparisons:
-                try:
-                    stamp = datetime.fromisoformat(sample["time"]).timestamp()
-                    value = float(sample["actual_kw"])
-                    if cutoff <= stamp <= now.timestamp() and round(stamp, 3) not in known and math.isfinite(value) and value >= 0:
-                        states.append((stamp, value))
-                except (KeyError, TypeError, ValueError):
-                    continue
-            hours = await self.hass.async_add_executor_job(power_hours, states, now.timestamp(), 900)
-            candidate, report = learn_site_profile(hours, self.forecast_rows, self.factor, today, self.tz)
+                    # Bound peak memory on installations with high-frequency
+                    # power sensors; retain only integrated bins across chunks.
+                    cursor=now-timedelta(days=90)
+                    while cursor<now:
+                        stop=min(now,cursor+timedelta(days=3))
+                        history=await get_instance(self.hass).async_add_executor_job(partial(
+                            get_significant_states,self.hass,cursor,stop,entity_ids=[entity],
+                            significant_changes_only=False,minimal_response=False,no_attributes=False))
+                        states=[]
+                        for state in history.get(entity,[]):
+                            try:
+                                value=float(state.state)
+                                unit=state.attributes.get('unit_of_measurement','').lower()
+                                value=value/1000 if unit=='w' else value if unit=='kw' else None
+                            except (ValueError,TypeError):
+                                value=None
+                            stamp=max(cursor.timestamp(),state.last_updated.timestamp())
+                            states.append((stamp,value))
+                        chunk=await self.hass.async_add_executor_job(power_hours,states,stop.timestamp(),900)
+                        for stamp,row in chunk.items():
+                            # Chunks can split a quarter: sum their disjoint
+                            # coverage instead of replacing half an interval.
+                            target=hours.setdefault(stamp,[0.,0.])
+                            target[0]+=row[0];target[1]+=row[1]
+                        cursor=stop
+                except Exception as exc:
+                    recorder_error=str(exc) or type(exc).__name__
+                    _LOGGER.warning('Recorder history read failed; using measured archive: %s',recorder_error)
+            self.power_archive.flush(now.timestamp())
+            self.power_archive.merge_recorder(hours,now.timestamp())
+            measured={**self.power_archive.bins}
+            for stamp,row in hours.items():
+                if row[1]>=measured.get(stamp,[0,0])[1]:
+                    measured[stamp]=row
+            weather={int(row['end']):row for row in quarter_weather_rows(self.archive_rows)}
+            weather.update({int(row['end']):row for row in self.forecast_rows})
+            candidate, report = learn_profile(measured,list(weather.values()),self.factor,today,self.tz,self.shape_factors)
+            report['power_archive_intervals']=len(self.power_archive.bins)
+            report['recorder_error']=recorder_error
             if candidate:
                 self.shape_factors = candidate
                 self.shape_profile_updated_at = now.isoformat()
-                self.shape_report = {**report, "profile_source": "newly_validated"}
+                self.shape_report = {**report, "profile_source": "newly_validated",
+                    'active_profile':{key:report.get(key) for key in (
+                        'training_dates','validation_dates','training_days','validation_days',
+                        'confidence_percent','before_wape_percent','after_wape_percent')}}
                 # Today's stored comparisons were made against the previous
                 # model. Reusing them would immediately counteract the newly
                 # learned profile with an obsolete live scale.
@@ -605,6 +651,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                 # array.  It remains active until a new profile passes.
                 self.shape_report = {
                     **report,
+                    'active_profile':self.shape_report.get('active_profile',{}),
                     "latest_candidate_status": report.get("status"),
                     "status": "persisted_active",
                     "profile_source": "stored_validated_profile",
@@ -618,6 +665,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             if self.shape_factors:
                 self.shape_report = {
                     "status": "persisted_active",
+                    'active_profile':self.shape_report.get('active_profile',{}),
                     "latest_candidate_status": "history_error",
                     "profile_source": "stored_validated_profile",
                     "profile_updated_at": self.shape_profile_updated_at,
@@ -654,7 +702,10 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
     @callback
     def _power_changed(self, event):
         state = event.data.get("new_state")
-        if state is None or not self.forecast_rows:
+        if state is None:
+            return
+        self._archive_power_state(state)
+        if not self.forecast_rows:
             return
         try:
             value = float(state.state)
@@ -691,6 +742,9 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
 
     @callback
     def async_start_tracking(self):
+        state=self.hass.states.get(self.config.get('dc_power_sensor',DEFAULT_DC_SENSOR))
+        if state is not None:
+            self._archive_power_state(state)
         if self._unsub_energy is None:
             self._unsub_energy = async_track_state_change_event(
                 self.hass, [self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR)], self._energy_changed
@@ -702,9 +756,23 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
 
     @callback
     def async_stop_tracking(self):
+        self.power_archive.observe(datetime.now(timezone.utc).timestamp(),None)
+        self._persist(force=True)
         if self._unsub_power:
             self._unsub_power()
             self._unsub_power = None
         if self._unsub_energy:
             self._unsub_energy()
             self._unsub_energy = None
+
+    def _archive_power_state(self,state):
+        value=None
+        try:
+            raw=float(state.state)
+            unit=str(state.attributes.get('unit_of_measurement','')).lower()
+            if math.isfinite(raw) and raw>=0 and unit in ('w','kw') and not state.attributes.get('restored'):
+                value=raw/1000 if unit=='w' else raw
+        except (ValueError,TypeError):
+            pass
+        self.power_archive.observe(datetime.now(timezone.utc).timestamp(),value)
+        self._persist()

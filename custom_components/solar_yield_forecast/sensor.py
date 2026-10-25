@@ -78,6 +78,7 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
             'last_refresh_error':values.get('last_refresh_error')}
         if self.key in ('model_status','recalculation_status'):
             attrs['recalculation'] = values.get('recalculation',{})
+            attrs['power_archive'] = values.get('power_archive',{})
         if self.key == "today":
             attrs.update({
                 "daily_forecast": values.get("daily", []),
@@ -90,7 +91,7 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
                 "shape_factors_utc": values.get("shape_factors_utc", {}),
                 "shape_profile_updated_at": values.get("shape_profile_updated_at"),
                 "shape_energy_normalizers": values.get("shape_energy_normalizers", {}),
-                "forecast_method": "site_residual_15min_x_continuous_weather",
+                "forecast_method": "robust_all_weather_15min_x_continuous_weather",
                 "live_scale_percent": values.get("live_scale_percent"),
                 "live_correction_samples": values.get("live_correction_samples"),
                 "forecast_baselines": values.get("forecast_baselines", {}),

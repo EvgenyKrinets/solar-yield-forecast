@@ -297,10 +297,17 @@ Built for real roofs, real weather and transparent Home Assistant automation.
 
 </div>
 
-# Model update — 1.4.5
+# Model update — 1.5.0
 
-The adaptive profile is learned independently for each installation from its own
-15-minute PV power history. A continuous measured/model residual corrects the
+The adaptive profile is learned independently for each installation from all its
+eligible completed days of 15-minute PV power history, with modest extra weight
+for clear days. At least seven eligible days and three chronological holdout days
+are required. Ten eligible days mean seven training days and three validation
+days, not a profile fitted on only two clear days. Outlier-resistant residuals,
+small-sample confidence shrinkage, and morning/peak/evening holdout checks guard
+against learning a single passing cloud as a permanent dip. Confidence limits
+correction strength; it does not express a probability of forecast correctness.
+A continuous measured/model residual corrects the
 morning and afternoon shape; weather is always applied, and the daily energy
 calibration remains separate. Held-out completed days must show an improvement
 before a correction activates. Small roofs and large arrays use the same
@@ -324,6 +331,14 @@ roof, use manual coordinates if the city centre is not precise enough.
 
 The learning path and chart both bridge bounded unavailable gaps up to ten
 minutes. `shape_calibration.day_diagnostics` explains excluded days.
+`training_dates` and `validation_dates` list the exact candidate sample;
+`active_profile` describes the correction actually in use, including when the
+latest candidate was rejected and a previously validated V3 correction remains.
+The integration keeps its own rolling 90-day measured quarter-hour power archive
+in Home Assistant storage, independent of Recorder purge settings. Existing
+available Recorder power history is backfilled; already deleted detailed data
+cannot be reconstructed from daily kWh totals. Restart and changed-source gaps
+are not silently turned into full measurement coverage.
 **Recalculation status** reports real completion, stages, duration and errors;
 **Model status** distinguishes daily-only calibration from a learned profile.
 An optional persistent HA notification also shows the manual operation's outcome.
