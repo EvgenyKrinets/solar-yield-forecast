@@ -326,7 +326,7 @@ class SolarComparisonCard extends HTMLElement {
       .periods button[aria-pressed=true]{background:#ff880018;color:#f58200;font-weight:600}
       .date-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0}
       .date-nav input{font:inherit;color:inherit;background:transparent;border:0;max-width:65%;text-align:center}
-      .tools{display:flex;justify-content:flex-end;gap:4px}.tools button{font-size:13px}
+      .tools{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}.tools button{font-size:13px}
       .chart-wrap{touch-action:pan-y}.chart-wrap.zoomed{touch-action:none}
       .legend{margin:16px 0;gap:8px}.legend button[hidden]{display:none}.legend button{display:flex;align-items:center;gap:8px;padding:6px}
       .toggle{width:34px;height:20px;border-radius:12px;background:var(--series);position:relative}.toggle:after{content:'';position:absolute;width:16px;height:16px;top:2px;right:2px;background:white;border-radius:50%}
