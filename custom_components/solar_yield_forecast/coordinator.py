@@ -473,7 +473,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         local = now.astimezone(self.tz)
         today = local.date().isoformat()
         previous_count = sum(len(v) for v in self.forecast_ledger.values())
-        capture(self.forecast_ledger, result, now, self.tz, '1.6.0',
+        capture(self.forecast_ledger, result, now, self.tz, '1.6.1',
                 self._archive_signature(), self.weather_updated_at)
         result['forecast_ledger_history'], result['forecast_ledger_summary'] = score(
             self.forecast_ledger, self.actuals, today)
@@ -499,13 +499,19 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
                     "late": snapshot.get("late", False),
                     "lead_days": snapshot.get("lead_days"),
                 }
-        cutoff = (local.date()-timedelta(days=90)).isoformat()
+        cutoff = (local.date()-timedelta(days=730)).isoformat()
         self.daily_baselines = {k:v for k,v in self.daily_baselines.items() if k >= cutoff}
         self.daily_errors = {k:v for k,v in self.daily_errors.items() if k >= cutoff}
         errors = [v["abs_error_percent"] for k,v in sorted(self.daily_errors.items())[-30:] if v.get("lead_days",0) >= 1]
         result["forward_error_percent"] = round(sum(errors)/len(errors),1) if errors else None
         result["forward_error_days"] = len(errors)
         result["forecast_baselines"] = {k:v for k,v in sorted(self.daily_baselines.items())[-8:]}
+        result['legacy_forecast_history'] = [
+            {'date': day, 'kwh': value['kwh'], 'kind': 'legacy',
+             'recorded_at': value.get('recorded_at'), 'lead_days': value.get('lead_days'),
+             'late': value.get('late', False)}
+            for day, value in sorted(self.daily_baselines.items())
+        ]
         result["forecast_accuracy_history"] = [{"date":k, **v} for k,v in sorted(self.daily_errors.items())[-30:]]
         result["comparison_history"] = self.live_comparisons[-96:]
         self._persist()

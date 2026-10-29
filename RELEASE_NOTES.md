@@ -1,3 +1,13 @@
+## 1.6.1 — Historical forecast versus actual in every calendar view
+
+- Add purple saved-original energy bars to week, month, year, all-time and an inclusive custom date interval. Keep orange actuals and green current/future predictions independently switchable; never substitute recalculated past forecasts.
+- Expose retained legacy first daily baselines separately, with explicit source selection and source counts. Default priority is day-ahead, morning, legacy, then late-start; no duplicate forecasts per day.
+- Compare totals only across matched completed days; exclude late starts and legacy snapshots without confirmed advance issuance. Missing values remain missing, zero remains zero, partial calendar totals are labelled. Mixed-source comparison is not homogeneous accuracy validation.
+- Extend original forecast and legacy baseline retention to 730 days for annual review. Detailed measured-power archive remains 90 days. Existing deleted/unrecorded history and missing original power curves cannot be reconstructed.
+- Add deterministic cohort/priority, matched-total, custom-range, retention and browser regression coverage. Forecasting model is unchanged.
+
+Update through HACS and restart Home Assistant. Existing saved legacy daily predictions become visible immediately; new original curves continue accumulating prospectively.
+
 ## 1.6.0 — Immutable forecast ledger and 30-day accuracy history
 
 - Separate fixed original prediction, current updated daily estimate and actual yield in the card. Toggle a purple immutable curve when navigating to archived dates.

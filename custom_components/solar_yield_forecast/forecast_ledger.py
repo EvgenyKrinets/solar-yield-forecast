@@ -8,7 +8,7 @@ def capture(ledger, result, now, tz, version, signature, weather_at):
     """First successful refresh after 20:00 / before generation; never backfill."""
     local = now.astimezone(tz)
     today = local.date().isoformat()
-    cutoff = (local.date() - timedelta(days=90)).isoformat()
+    cutoff = (local.date() - timedelta(days=730)).isoformat()
     for day in list(ledger):
         if day < cutoff:
             del ledger[day]
