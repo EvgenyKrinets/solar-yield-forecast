@@ -47,6 +47,23 @@ const fs=require('node:fs');
    assert.equal(await page.locator('.chart-tooltip').evaluate(e=>e.style.display),'block');
  }
  await page.evaluate(()=>{
+   const c=document.querySelector('solar-comparison-card');
+   const a=window.fixture.states['sensor.solar_yield_forecast_today'].attributes;
+   const date=c._selected;
+   a.forecast_ledger_history=[{date:'2026-10-23',kind:'day_ahead',kwh:100,actual_kwh:90,deviation_kwh:-10,deviation_percent:-11.11,version:'1.6.0',completed:true}];
+   a.forecast_ledger_summary={day_ahead_30:{samples:1,wape_percent:11.11,bias_percent:11.11}};
+   c._original={kind:'day_ahead',kwh:100,recorded_at:'2026-10-23T20:00:00+03:00',version:'1.6.0',points:c._hass.states[c.config.forecast_entity].attributes.points.filter(p=>Number.isFinite(Date.parse(p.time))&&solarDay(new Date(p.time),c._timeZone())===date)};
+   c._render();
+ });
+ assert.equal(await page.locator('.original-line').count(),1);
+ assert.match(await page.locator('section').innerText(),/2026-10-23/);
+ assert.match(await page.locator('.summary').innerText(),/100.0/);
+ await page.locator('.original-toggle').click();
+ assert.equal(await page.locator('.original-line').count(),0);
+ await page.locator('[data-cohort="morning"]').click();
+ assert.doesNotMatch(await page.locator('section tbody').innerText(),/2026-10-23/);
+ await page.locator('[data-cohort="day_ahead"]').click();
+ await page.evaluate(()=>{
    const fixture=window.fixture;
    const today=fixture.states['sensor.solar_yield_forecast_today'];
    document.querySelector('solar-comparison-card').hass={...fixture,states:{...fixture.states,

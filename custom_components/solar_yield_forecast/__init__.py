@@ -13,9 +13,9 @@ from .coordinator import SolarYieldCoordinator
 
 PLATFORMS = ["sensor", "button"]
 FRONTEND_URL = f"/api/{DOMAIN}/solar-comparison-card.js"
-FRONTEND_VERSION = "1.5.0"
+FRONTEND_VERSION = "1.6.0"
 PANEL_URL = "solar-yield-forecast"
-PANEL_TAG = "solar-yield-forecast-panel-v1-5-0"
+PANEL_TAG = "solar-yield-forecast-panel-v1-6-0"
 
 
 class SolarForecastProfileView(HomeAssistantView):
@@ -31,7 +31,9 @@ class SolarForecastProfileView(HomeAssistantView):
         if not coordinators:
             return self.json({"date": date, "points": []}, status_code=404)
         profiles = (coordinators[0].data or {}).get("power_profiles_by_date", {})
-        return self.json({"date": date, "points": profiles.get(date, [])})
+        slots = coordinators[0].forecast_ledger.get(date, {})
+        original = slots.get('day_ahead') or slots.get('morning') or slots.get('late_start')
+        return self.json({"date": date, "points": profiles.get(date, []), 'original': original})
 
 
 async def _async_reload_entry(hass, entry):

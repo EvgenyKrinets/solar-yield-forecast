@@ -1,3 +1,14 @@
+## 1.6.0 — Immutable forecast ledger and 30-day accuracy history
+
+- Separate fixed original prediction, current updated daily estimate and actual yield in the card. Toggle a purple immutable curve when navigating to archived dates.
+- Capture first fresh next-day forecast after 20:00 local time and a separate pre-generation morning profile. Late starts are labelled and excluded from accuracy cohorts. Full-day interval coverage, DST-aware local boundaries and bounded weather freshness are required.
+- Preserve snapshots, version and configuration for 90 days across restart/recalculation; never fabricate forecasts for past days. Existing legacy baselines remain in legacy diagnostics only.
+- Add 7/30-calendar-day history tables with predicted/actual kWh, signed deviations, version, WAPE, bias and sample counts. Keep day-ahead/morning cohorts separate. Current and missing/zero completed totals do not enter accuracy aggregates.
+- Explicitly distinguish daily energy error from curve error and retrospective validation from prospective forecasts. Historical completeness of the daily energy counter is not independently verified; metric changes alone do not prove learning.
+- New deterministic tests cover persistence, immutable snapshots, late installation, cohort separation, stale/incomplete weather, calendar windows and Israel DST. No forecasting algorithm changes.
+
+Update in HACS and restart Home Assistant. New prospective history accumulates from installation; no previous month of missing original predictions can be reconstructed. Evening capture happens on the first eligible regular update, not necessarily at exactly 20:00.
+
 ## 1.5.0 — Robust all-weather learning and independent 90-day power archive
 
 - Use **all eligible completed days**, rather than selecting only three clear days. Clear-day weights are modestly higher (1.25 versus 0.75–1.0); weather remains an input at every interval.

@@ -95,6 +95,8 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
                 "live_scale_percent": values.get("live_scale_percent"),
                 "live_correction_samples": values.get("live_correction_samples"),
                 "forecast_baselines": values.get("forecast_baselines", {}),
+                'forecast_ledger_history': values.get('forecast_ledger_history', []),
+                'forecast_ledger_summary': values.get('forecast_ledger_summary', {}),
                 "power_comparisons": values.get("comparison_history", []),
                 "site_configuration": values.get("site", {}),
             })
