@@ -6,6 +6,30 @@ const source=fs.readFileSync('custom_components/solar_yield_forecast/frontend/so
 const ctx={HTMLElement:class{},customElements:{get(){},define(){}},window:{}};
 vm.createContext(ctx);vm.runInContext(source,ctx);
 const row=(minutes,state)=>({last_updated:new Date(minutes*60000).toISOString(),state:String(state)});
+test('historical originals preserve priority, zero, gaps and explicit cohorts',()=>{
+ const attrs={forecast_ledger_history:[{date:'2020-01-01',kind:'morning',kwh:8},{date:'2020-01-01',kind:'day_ahead',kwh:10},{date:'2020-01-02',kind:'day_ahead',kwh:0}],legacy_forecast_history:[{date:'2020-01-01',kind:'legacy',kwh:90}]};
+ assert.equal(ctx.solarHistoricalDays(attrs)['2020-01-01'].kwh,10);
+ assert.equal(ctx.solarHistoricalDays(attrs)['2020-01-02'].kwh,0);
+ assert.equal(ctx.solarHistoricalDays(attrs)['2020-01-03'],undefined);
+ assert.equal(ctx.solarHistoricalDays(attrs,'legacy')['2020-01-01'].kwh,90);
+ assert.equal(ctx.solarHistoricalDays(attrs,'morning')['2020-01-02'],undefined);
+});
+test('period graphs compare only matched complete days and keep late/legacy labels',()=>{
+ const result=vm.runInContext(`(()=>{
+ const attrs={daily_actuals:{'2020-01-01':20,'2020-01-02':40,'2020-01-03':5},daily_forecast:[],forecast_ledger_history:[{date:'2020-01-01',kind:'day_ahead',kwh:10},{date:'2020-01-02',kind:'late_start',kwh:50}],legacy_forecast_history:[{date:'2020-01-03',kind:'legacy',kwh:6,lead_days:1,late:false}]};
+ const c={_hass:{states:{test:{attributes:attrs}}},config:{day_forecast_entity:'test'},_selected:'2020-01-15',_period:'month',_visible:[true,true,true],_timeZone:()=>'UTC',getBoundingClientRect:()=>({width:850})};
+ return SolarComparisonCard.prototype._energySvg.call(c);
+ })()`,ctx);
+ assert.equal((result.match(/data-historical="true"/g)||[]).length,3);
+ assert.match(result,/завершённым дням: 2/);
+ assert.match(result,/Прогноз: 16.0 кВт·ч · Факт: 25.0/);
+ assert.match(result,/Прежних снимков: 1/);
+ assert.match(result,/нет данных/);
+});
+test('custom reversed interval is rejected rather than summed',()=>{
+ const result=vm.runInContext(`SolarComparisonCard.prototype._energySvg.call({_hass:{states:{test:{attributes:{}}}},config:{day_forecast_entity:'test'},_selected:'2020-01-01',_period:'range',_rangeStart:'2020-02-01',_rangeEnd:'2020-01-01',_timeZone:()=>'UTC'})`,ctx);
+ assert.match(result,/Начало интервала/);
+});
 test('time weighting rather than sample count; energy units',()=>{
  const result=ctx.solarQuarterHours([row(0,1000),row(1,3000),row(2,3000)],'W',900000);
  assert.equal(result.length,1);assert.equal(result[0].power_w,43000/15);

@@ -113,6 +113,17 @@ function solarMidnight(day,timeZone='Asia/Jerusalem') {
   }
   return t;
 }
+// Historical originals are never replaced by a current/retrospective forecast.
+function solarHistoricalDays(attrs, mode='best') {
+  const result={};
+  const priority={day_ahead:0,morning:1,legacy:2,late_start:3};
+  for(const row of [...(attrs.forecast_ledger_history||[]),...(attrs.legacy_forecast_history||[])]){
+    if(mode!=='best'&&row.kind!==mode)continue;
+    if(row.kwh==null||!Number.isFinite(Number(row.kwh))||Number(row.kwh)<0)continue;
+    if(!result[row.date]||priority[row.kind]<priority[result[row.date].kind])result[row.date]=row;
+  }
+  return result;
+}
 class SolarComparisonCard extends HTMLElement {
   connectedCallback() {
     this._resizeObserver = new ResizeObserver(() => this._render());
@@ -321,10 +332,12 @@ class SolarComparisonCard extends HTMLElement {
       .toggle{width:34px;height:20px;border-radius:12px;background:var(--series);position:relative}.toggle:after{content:'';position:absolute;width:16px;height:16px;top:2px;right:2px;background:white;border-radius:50%}
       [aria-pressed=false] .toggle{background:#aaa}[aria-pressed=false] .toggle:after{right:16px}
       :host([expanded]){position:fixed;inset:0;z-index:1000;background:var(--card-background-color,white);overflow:auto}
-      .summary{display:flex;flex-wrap:wrap;gap:16px;font-size:16px;margin:12px 0}.empty{text-align:center;padding:20px;color:var(--secondary-text-color,#777)}
+      .tools label{min-width:0;max-width:100%}.history-mode{display:block;max-width:100%;min-height:36px;font:inherit;background:var(--card-background-color,white);color:inherit;border:1px solid var(--divider-color,#ddd);border-radius:8px}.summary{display:flex;flex-wrap:wrap;gap:16px;font-size:16px;margin:12px 0}.empty{text-align:center;padding:20px;color:var(--secondary-text-color,#777)}
       </style><ha-card><h3>${esc(this.config.title)}</h3>
-      <div class="periods">${[['day','День'],['week','Неделя'],['month','Месяц'],['year','Год'],['all','Всё время']].map(([key,label])=>`<button data-period="${key}" aria-pressed="${this._period===key}">${label}</button>`).join('')}</div>
-      <div class="date-nav"><button data-step="-1" aria-label="Предыдущий период" ${this._period==='all'?'disabled':''}>❮</button><input aria-label="Выбрать дату" type="date" value="${this._selected}"><button data-step="1" aria-label="Следующий период" ${this._period==='all'?'disabled':''}>❯</button></div>
+      <div class="periods">${[['day','День'],['week','Неделя'],['month','Месяц'],['year','Год'],['range','Интервал'],['all','Всё время']].map(([key,label])=>`<button data-period="${key}" aria-pressed="${this._period===key}">${label}</button>`).join('')}</div>
+      <div class="date-nav"><button data-step="-1" aria-label="Предыдущий период" ${['all','range'].includes(this._period)?'disabled':''}>❮</button><input aria-label="Выбрать дату" type="date" value="${this._selected}"><button data-step="1" aria-label="Следующий период" ${['all','range'].includes(this._period)?'disabled':''}>❯</button></div>
+      ${this._period==='range'?'<div class="tools"><label>С <input class="range-start" type="date" value="'+(this._rangeStart||solarShift(this._selected,-29))+'"></label><label>По <input class="range-end" type="date" value="'+(this._rangeEnd||this._selected)+'"></label></div>':''}
+      ${this._period!=='day'?'<div class="tools"><label>Исторический прогноз <select class="history-mode">'+[['best','Сохранённый: накануне → утром → прежняя версия'],['day_ahead','Только накануне'],['morning','Только утром'],['legacy','Прежние версии']].map(([k,label])=>'<option value="'+k+'" '+((this._historyMode||'best')===k?'selected':'')+'>'+label+'</option>').join('')+'</select></label><button class="original-toggle" aria-pressed="'+!this._hideOriginal+'" style="color:#a855f7">Исторический прогноз</button></div>':''}
       <div class="tools"><button class="now">Сегодня</button><button class="reset">Сбросить Zoom</button><button class="expand" aria-label="Развернуть график">${this.hasAttribute('expanded')?'Свернуть':'⛶'}</button></div>
       ${this._period==='day'?this._forecastSummary(esc):''}
       <div class="chart-wrap ${this._view[1]-this._view[0]<24?'zoomed':''}">${this._period==='day'?this._svg():this._energySvg()}<div class="chart-tooltip"></div></div>
@@ -383,6 +396,12 @@ class SolarComparisonCard extends HTMLElement {
     this._root.querySelectorAll('[data-period]').forEach(el=>el.onclick=()=>this._select(this._selected,el.dataset.period));
     this._root.querySelectorAll('[data-step]').forEach(el=>el.onclick=()=>this._select(solarShift(this._selected,Number(el.dataset.step)*(this._period==='week'?7:1),this._period)));
     this._root.querySelector('input[type=date]').onchange=ev=>this._select(ev.target.value);
+    for(const field of ['start','end']){
+      const input=this._root.querySelector('.range-'+field);
+      if(input)input.onchange=ev=>{if(/^\d{4}-\d{2}-\d{2}$/.test(ev.target.value)){this[field==='start'?'_rangeStart':'_rangeEnd']=ev.target.value;this._render();}};
+    }
+    const historyMode=this._root.querySelector('.history-mode');
+    if(historyMode)historyMode.onchange=ev=>{this._historyMode=ev.target.value;this._render();};
     this._root.querySelector('.now').onclick=()=>this._select(solarDay(new Date(),this._timeZone()));
     this._root.querySelector('.reset').onclick=()=>{this._view=[0,24];this._render();};
     const originalToggle=this._root.querySelector('.original-toggle');
@@ -400,36 +419,53 @@ class SolarComparisonCard extends HTMLElement {
   _energySvg(){
     const attrs=this._hass.states[this.config.day_forecast_entity]?.attributes||{};
     const actual=attrs.daily_actuals||{}, forecast=Object.fromEntries((attrs.daily_forecast||[]).map(d=>[d.date,d.kwh]));
+    const originals=solarHistoricalDays(attrs,this._historyMode||'best');
+    const today=solarDay(new Date(),this._timeZone());
     let start=this._selected,end;
     if(this._period==='week'){
       const weekday=new Date(start+'T12:00:00Z').getUTCDay();start=solarShift(start,-((weekday+6)%7));end=solarShift(start,7);
     }else if(this._period==='month'){start=start.slice(0,7)+'-01';end=solarShift(start,1,'month');}
     else if(this._period==='year'){start=start.slice(0,4)+'-01-01';end=solarShift(start,1,'year');}
-    else{start=Object.keys({...actual,...forecast}).sort()[0]||start;end=solarShift(Object.keys({...actual,...forecast}).sort().at(-1)||start,1);}
-    const groups=new Map(),monthly=['year','all'].includes(this._period);
+    else if(this._period==='range'){start=this._rangeStart||solarShift(this._selected,-29);end=solarShift(this._rangeEnd||this._selected,1);}
+    else{start=Object.keys({...actual,...forecast,...originals}).sort()[0]||start;end=solarShift(Object.keys({...actual,...forecast,...originals}).sort().at(-1)||start,1);}
+    if(start>=end)return '<div class="empty">Начало интервала должно быть не позже конца.</div>';
+    if((Date.parse(end)-Date.parse(start))/86400000>3660)return '<div class="empty">Выберите интервал не больше 10 лет.</div>';
+    const groups=new Map(),monthly=['year','all'].includes(this._period)||(Date.parse(end)-Date.parse(start))/86400000>62;
+    let pairedActual=0,pairedForecast=0,pairedCount=0,legacyCount=0,lateCount=0;
     for(let day=start;day<end;day=solarShift(day,1)){
       const key=monthly?day.slice(0,7)+'-01':day;
-      const g=groups.get(key)||{date:key,a:null,f:null,count:0};
+      const g=groups.get(key)||{date:key,a:null,f:null,p:null,count:0,pc:0};
       if(actual[day]!=null&&Number.isFinite(Number(actual[day]))){g.a=(g.a??0)+Number(actual[day]);g.count++;}
-      if(forecast[day]!=null&&Number.isFinite(Number(forecast[day])))g.f=(g.f??0)+Number(forecast[day]);
+      if(day>=today&&forecast[day]!=null&&Number.isFinite(Number(forecast[day])))g.f=(g.f??0)+Number(forecast[day]);
+      const original=originals[day];
+      if(original){
+        g.p=(g.p??0)+Number(original.kwh);g.pc++;
+        if(original.kind==='legacy')legacyCount++;
+        const valid=original.kind==='day_ahead'||original.kind==='morning'||(original.kind==='legacy'&&!original.late&&original.lead_days>=1);
+        if(!valid)lateCount++;
+        if(valid&&day<today&&actual[day]!=null&&Number.isFinite(Number(actual[day]))&&Number(actual[day])>=0){
+          pairedActual+=Number(actual[day]);pairedForecast+=Number(original.kwh);pairedCount++;
+        }
+      }
       groups.set(key,g);
     }
     const rows=[...groups.values()],W=Math.max(240,Math.round(this.getBoundingClientRect().width||850)-32),H=300,l=46,r=12,b=50,t=26;
-    const max=Math.max(1,...rows.flatMap(d=>[this._visible[1]?d.a:0,this._visible[2]?d.f:0]))*1.1;
+    const max=Math.max(1,...rows.flatMap(d=>[this._visible[1]?d.a:0,this._visible[2]?d.f:0,this._hideOriginal?0:d.p]))*1.1;
     const x=i=>l+(W-l-r)*(i+.5)/Math.max(1,rows.length),y=v=>H-b-(H-t-b)*v/max;
-    const bw=Math.max(1,Math.min(28,(W-l-r)/Math.max(1,rows.length)*.35));
+    const bw=Math.max(.5,Math.min(22,(W-l-r)/Math.max(1,rows.length)*.25));
     let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Выработка за выбранный период"><text x="${l}" y="16" fill="currentColor" font-size="12">кВт·ч</text>`;
     for(let i=0;i<=4;i++)svg+=`<line x1="${l}" x2="${W-r}" y1="${y(max*i/4)}" y2="${y(max*i/4)}" stroke="currentColor" opacity=".12"/><text x="${l-6}" y="${y(max*i/4)+4}" text-anchor="end" fill="currentColor" font-size="11">${(max*i/4).toFixed(0)}</text>`;
     rows.forEach((d,i)=>{
-      const label=`${d.date}: факт ${d.a===null?'нет данных':d.a.toFixed(1)+' кВт·ч'}, прогноз ${d.f===null?'нет данных':d.f.toFixed(1)+' кВт·ч'}${monthly?', дней с данными: '+d.count:''}`;
-      svg+=`<g data-date="${d.date}" tabindex="0" role="button" aria-label="${label}"><title>${label}</title><rect x="${x(i)-bw}" y="${t}" width="${bw*2}" height="${H-b-t}" fill="transparent"/>`;
-      if(d.a!==null&&this._visible[1])svg+=`<rect x="${x(i)-bw}" y="${y(d.a)}" width="${bw}" height="${Math.max(1,H-b-y(d.a))}" rx="2" fill="#ff9e3d"/>`;
-      if(d.f!==null&&this._visible[2])svg+=`<rect x="${x(i)}" y="${y(d.f)}" width="${bw}" height="${Math.max(1,H-b-y(d.f))}" rx="2" fill="#16a06a"/>`;
+      const label=`${d.date}: факт ${d.a===null?'нет данных':d.a.toFixed(1)+' кВт·ч'}, исторический прогноз ${d.p===null?'нет данных':d.p.toFixed(1)+' кВт·ч'}, текущий прогноз ${d.f===null?'нет данных':d.f.toFixed(1)+' кВт·ч'}; дней факта: ${d.count}, дней прогноза: ${d.pc}`;
+      svg+=`<g data-date="${d.date}" tabindex="0" role="button" aria-label="${label}"><title>${label}</title><rect x="${x(i)-1.5*bw}" y="${t}" width="${bw*3}" height="${H-b-t}" fill="transparent"/>`;
+      if(d.a!==null&&this._visible[1])svg+=`<rect x="${x(i)-1.5*bw}" y="${y(d.a)}" width="${bw}" height="${Math.max(0,H-b-y(d.a))}" rx="2" fill="#ff9e3d"/>`;
+      if(d.p!==null&&!this._hideOriginal)svg+=`<rect data-historical="true" x="${x(i)-.5*bw}" y="${y(d.p)}" width="${bw}" height="${Math.max(0,H-b-y(d.p))}" rx="2" fill="#a855f7"/>`;
+      if(d.f!==null&&this._visible[2])svg+=`<rect x="${x(i)+.5*bw}" y="${y(d.f)}" width="${bw}" height="${Math.max(0,H-b-y(d.f))}" rx="2" fill="#16a06a"/>`;
       if(i%Math.max(1,Math.ceil(rows.length/(W<540?7:14)))===0)svg+=`<text x="${x(i)}" y="${H-24}" text-anchor="middle" font-size="11" fill="currentColor">${monthly?d.date.slice(2,7):d.date.slice(8)}</text>`;
       svg+='</g>';
     });
     svg+='</svg>';
-    return `<div class="summary">${start} — ${solarShift(end,-1)}</div>${svg}<div class="small">Факт: ${rows.some(d=>d.a!==null)?rows.reduce((sum,d)=>sum+(d.a||0),0).toFixed(1)+' кВт·ч':'нет данных'}. Показаны только сохранённые дни; неполные периоды не являются полным итогом. Нажмите столбец, чтобы открыть период.</div>`;
+    return `<div class="summary">${start} — ${solarShift(end,-1)}</div>${svg}<div class="period-comparison">Сравнение по совпадающим завершённым дням: ${pairedCount}. ${pairedCount?'Прогноз: '+pairedForecast.toFixed(1)+' кВт·ч · Факт: '+pairedActual.toFixed(1)+' кВт·ч · Факт − прогноз: '+(pairedActual-pairedForecast).toFixed(1)+' кВт·ч'+(pairedActual>0?' / '+(100*(pairedActual-pairedForecast)/pairedActual).toFixed(1)+'%':''):'Нет подходящих пар.'}</div><div class="small">Факт за доступные дни: ${rows.some(d=>d.a!==null)?rows.reduce((sum,d)=>sum+(d.a||0),0).toFixed(1)+' кВт·ч':'нет данных'}. Фиолетовый — сохранённый исторический прогноз; зелёный — текущий для сегодня и будущих дней. Прежних снимков: ${legacyCount}; поздних/неподтверждённой заблаговременности: ${lateCount} (вне сравнения). При смешанных источниках итог не является однородной оценкой точности. Пропуски не заменяются нулями. Неполный месяц/год не является полным итогом. Нажмите столбец, чтобы открыть период.</div>`;
   }
   _bindZoom(wrapper){
     const fraction=clientX=>{
@@ -494,7 +530,7 @@ class SolarComparisonCompactCard extends SolarComparisonCard {
 }
 if(!customElements.get('solar-comparison-compact')) customElements.define('solar-comparison-compact', SolarComparisonCompactCard);
 
-const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-6-0';
+const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-6-1';
 const SOLAR_MANAGED_DASHBOARD='solar-yield-forecast-dashboard';
 
 function solarPanelCardConfig(config={}) {

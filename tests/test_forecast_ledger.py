@@ -77,3 +77,11 @@ def test_stale_partial_and_wrong_evening_do_not_capture():
     result['power_profiles_by_date']['2026-10-25'].pop()
     data={};ledger.capture(data,result,now,tz,'v','s',now.isoformat())
     assert data=={}
+
+
+def test_originals_survive_for_yearly_review_but_expire_after_two_years():
+    tz=timezone.utc; now=datetime(2026,10,25,20,tzinfo=tz)
+    data={'2025-01-01': {'day_ahead': {'kwh': 10}}, '2023-01-01': {'day_ahead': {'kwh': 10}}}
+    ledger.capture(data,fixture(now,tz),now,tz,'v','s',now.isoformat())
+    assert '2025-01-01' in data
+    assert '2023-01-01' not in data
