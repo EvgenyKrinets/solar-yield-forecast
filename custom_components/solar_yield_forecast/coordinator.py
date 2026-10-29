@@ -23,6 +23,7 @@ from .model import (combine_weather, calibration, daily_shape_normalizers, day_o
                     forecast_summary, open_meteo_azimuth, merge_quarter_hourly,
                     recent_live_scale, quarter_weather_rows)
 from .history import daily_energy_maxima
+from .forecast_ledger import capture, score
 from .freshness import usable_forecast
 from .robust import learn_profile
 from .power_archive import PowerArchive
@@ -63,6 +64,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         self.cal_days = 0
         self.training_error = None
         self.daily_baselines = {}
+        self.forecast_ledger = {}
         self.daily_errors = {}
         self.live_comparisons = []
         self._unsub_power = None
@@ -101,6 +103,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             except (TypeError, ValueError):
                 pass
         self.daily_baselines = data.get("daily_baselines", {}) if same_energy_source else {}
+        self.forecast_ledger = data.get('forecast_ledger', {}) if same_energy_source else {}
         self.daily_errors = data.get("daily_errors", {}) if same_energy_source else {}
         self.history_import = (
             data.get("history_import", self.history_import)
@@ -452,6 +455,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             "actuals_sensor": self.config.get("daily_sensor", DEFAULT_DAILY_SENSOR),
             "history_import": self.history_import,
             "daily_baselines": self.daily_baselines,
+            'forecast_ledger': self.forecast_ledger,
             "daily_errors": self.daily_errors,
             # Short-term live comparisons are separate from the measured
             # 90-day archive and are not treated as complete history coverage.
@@ -468,6 +472,13 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
     def _update_scorecard(self, now, result):
         local = now.astimezone(self.tz)
         today = local.date().isoformat()
+        previous_count = sum(len(v) for v in self.forecast_ledger.values())
+        capture(self.forecast_ledger, result, now, self.tz, '1.6.0',
+                self._archive_signature(), self.weather_updated_at)
+        result['forecast_ledger_history'], result['forecast_ledger_summary'] = score(
+            self.forecast_ledger, self.actuals, today)
+        if sum(len(v) for v in self.forecast_ledger.values()) != previous_count:
+            self._persist(force=True)
         for row in result.get("daily", []):
             day = row["date"]
             if day not in self.daily_baselines:
