@@ -57,6 +57,17 @@ const fs=require('node:fs');
  assert.match(await page.locator('.legend').innerText(),/תחזית/);
  const hebrewText=await page.locator('ha-card').evaluate(el=>{const copy=el.cloneNode(true);copy.querySelector('.language-bar')?.remove();return copy.textContent;});
  assert.doesNotMatch(hebrewText,/[А-Яа-яЁё]/);
+ for(const lang of ['en','he']){
+   await page.locator('.language-picker').selectOption(lang);
+   await page.setViewportSize({width:390,height:900});
+   for(const period of ['day','week','month','year','range','all']){
+     await page.locator('[data-period="'+period+'"]').click();
+     const visible=await page.locator('ha-card').evaluate(el=>{const copy=el.cloneNode(true);copy.querySelector('.language-bar')?.remove();return copy.textContent;});
+     assert.doesNotMatch(visible,/[А-Яа-яЁё]/,lang+' '+period);
+     assert.ok(await page.locator('ha-card').evaluate(el=>el.scrollWidth<=el.clientWidth+1),lang+' '+period+' overflow');
+   }
+ }
+ await page.setViewportSize({width:1400,height:900});
  await page.locator('[data-period="range"]').click();
  assert.ok(await page.locator('.range-start').count());
  await page.locator('.language-picker').selectOption('auto');
