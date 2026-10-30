@@ -1,3 +1,12 @@
+## 1.6.2 — Sungrow-inspired layout and consistent series toggles
+
+- Refresh the card with large yield/fixed-forecast KPIs, orange period accents, neutral surfaces, improved whitespace, theme-aware colors and compact responsive controls. Inspired by the supplied reference, not affiliated with Sungrow.
+- Place fixed forecast in the common legend using the same accessible pressed-state switch as other series. Toggle both daily curve and historical period bars without deleting snapshots or changing metrics.
+- Remove legacy-version baseline options, fallback and counters from the visible interface. Retain stored data for compatibility; only prospective ledger snapshots are used for visible historical comparisons.
+- Format snapshot time in the installation timezone and move technical provenance into a disclosure. Preserve zoom, date navigation, custom intervals and existing forecasting calculations.
+
+Update through HACS and restart HA. Legacy-only purple bars will disappear intentionally; new frozen forecasts remain available.
+
 ## 1.6.1 — Historical forecast versus actual in every calendar view
 
 - Add purple saved-original energy bars to week, month, year, all-time and an inclusive custom date interval. Keep orange actuals and green current/future predictions independently switchable; never substitute recalculated past forecasts.
