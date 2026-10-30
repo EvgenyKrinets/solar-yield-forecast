@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 import pytest
+from datetime import datetime, timedelta
 from homeassistant.exceptions import HomeAssistantError
 
 
@@ -12,6 +13,28 @@ def coordinator(hass):
         obj=SolarYieldCoordinator(hass,entry)
     obj.data={}
     return obj
+
+
+async def test_pending_evening_retries_after_failure_and_returns_to_normal(hass,enable_custom_integrations):
+    obj=coordinator(hass)
+    evening=datetime(2026,10,30,23,30,tzinfo=obj.tz)
+    obj._async_fetch_model=AsyncMock(side_effect=ValueError('weather missing'))
+    with patch('custom_components.solar_yield_forecast.coordinator.datetime') as clock:
+        clock.now.return_value=evening
+        with pytest.raises(ValueError):
+            await obj._async_update_data()
+    assert obj.update_interval==timedelta(minutes=5)
+    obj.forecast_ledger={'2026-10-31':{'day_ahead':{'kwh':100}}}
+    obj._async_fetch_model=AsyncMock(return_value={})
+    with patch('custom_components.solar_yield_forecast.coordinator.datetime') as clock:
+        clock.now.return_value=evening
+        await obj._async_update_data()
+    assert obj.update_interval==timedelta(minutes=15)
+    obj.forecast_ledger={}
+    with patch('custom_components.solar_yield_forecast.coordinator.datetime') as clock:
+        clock.now.return_value=evening+timedelta(minutes=30)
+        await obj._async_update_data()
+    assert obj.update_interval==timedelta(minutes=15)
 
 
 async def test_recalculation_waits_for_real_refresh_and_reports_completion(hass,enable_custom_integrations):
