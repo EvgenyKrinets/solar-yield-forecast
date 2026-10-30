@@ -240,7 +240,7 @@ class SolarComparisonCard extends HTMLElement {
   }
   _languageChoice(){
     if(this._chosenLanguage)return this._chosenLanguage;
-    try{return this.config.language||localStorage.getItem('solar-yield-language')||'auto';}catch{return this.config.language||'auto';}
+    try{return localStorage.getItem('solar-yield-language')||this.config.language||'auto';}catch{return this.config.language||'auto';}
   }
   _language(){return solarLanguage(this._hass,this._languageChoice());}
   async _fetch() {
@@ -476,12 +476,12 @@ class SolarComparisonCard extends HTMLElement {
           return Math.abs(p[0]-hour)<=0.126?p[1]:null;
         };
         const values=(this._series||[]).map(near);
-        if(values.every(v=>v===null)){tip.style.display='none';if(guide)guide.setAttribute('opacity','0');return;}
+        const fixed=this._hideOriginal?null:near(this._originalSeries);
+        if(values.every(v=>v===null)&&fixed===null){tip.style.display='none';if(guide)guide.setAttribute('opacity','0');return;}
         const timeHour=Math.floor(hour),timeMin=Math.floor((hour-timeHour)*4)*15;
         tip.innerHTML='<b>'+String((timeHour+Math.floor(timeMin/60))%24).padStart(2,'0')+':'+String(timeMin%60).padStart(2,'0')+'</b><div><span aria-hidden="true" style="color:#3478f6">●</span> Предыдущий день: '+(values[0]===null?'—':(values[0]/1000).toFixed(2)+' кВт')+'</div><div><span aria-hidden="true" style="color:#e0aa12">●</span> PV (факт): '+(values[1]===null?'—':(values[1]/1000).toFixed(2)+' кВт')+'</div><div><span aria-hidden="true" style="color:#16a06a">●</span> Прогноз: '+(values[2]===null?'—':(values[2]/1000).toFixed(2)+' кВт')+'</div>';
         if(values[1]!==null) tip.innerHTML+='<div>Энергия за 15 мин: '+(values[1]/4000).toFixed(3)+' кВт·ч</div>';
         if(values[1]!==null && values[2]>0) tip.innerHTML+='<div>Отклонение: '+(100*(values[1]-values[2])/values[2]).toFixed(1)+'%</div>';
-        const fixed=this._hideOriginal?null:near(this._originalSeries);
         if(fixed!==null)tip.innerHTML+='<div>Фиксированный прогноз: '+(fixed/1000).toFixed(2)+' кВт</div>';
         solarTranslateDOM(tip,this._language());
         tip.style.display='block';
@@ -503,7 +503,7 @@ class SolarComparisonCard extends HTMLElement {
   _bindControls(){
     this._root.querySelectorAll('[data-open-day]').forEach(el=>{const open=()=>this._select(el.dataset.openDay,'day');el.onclick=open;el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();open();}};});
     const picker=this._root.querySelector('.language-picker');
-    if(picker)picker.onchange=ev=>{this._chosenLanguage=ev.target.value;try{localStorage.setItem('solar-yield-language',this._chosenLanguage);}catch{}this._render();};
+    if(picker)picker.onchange=ev=>{this._chosenLanguage=ev.target.value;try{localStorage.setItem('solar-yield-language',this._chosenLanguage);}catch{}this._render();this.dispatchEvent(new CustomEvent('solar-language-changed',{bubbles:true,composed:true}));};
     this._root.querySelectorAll('[data-period]').forEach(el=>el.onclick=()=>this._select(this._selected,el.dataset.period));
     this._root.querySelectorAll('[data-step]').forEach(el=>el.onclick=()=>this._select(solarShift(this._selected,Number(el.dataset.step)*(this._period==='week'?7:1),this._period)));
     this._root.querySelector('input[type=date]').onchange=ev=>this._select(ev.target.value);
@@ -686,6 +686,7 @@ class SolarYieldForecastPanel extends HTMLElement {
       @media(max-width:600px){header{padding:8px 8px 0}header strong{font-size:17px}.action{width:40px;padding:0;justify-content:center}.action span{display:none}main{padding:8px}}
     </style><header><strong></strong><div class="actions"><button class="settings action" type="button"><ha-icon icon="mdi:cog"></ha-icon><span></span></button></div></header><main></main>`;
     this.shadowRoot.querySelector('.settings').addEventListener('click',()=>this._openSettings());
+    this.addEventListener('solar-language-changed',()=>this._sync());
   }
   set panel(value){this._panel=value;this._sync();}
   get panel(){return this._panel;}
