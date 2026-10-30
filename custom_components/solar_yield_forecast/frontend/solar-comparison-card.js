@@ -88,7 +88,7 @@ function solarPatch(parent, template) {
     }
     if(next.nodeType===3){if(old.textContent!==next.textContent)old.textContent=next.textContent;return;}
     if(next.nodeType!==1)return;
-    for(const attr of [...old.attributes])if(!next.hasAttribute(attr.name))old.removeAttribute(attr.name);
+    for(const attr of [...old.attributes])if(!next.hasAttribute(attr.name)&&!(old.tagName==='DETAILS'&&attr.name==='open'))old.removeAttribute(attr.name);
     for(const attr of [...next.attributes])if(old.getAttribute(attr.name)!==attr.value)old.setAttribute(attr.name,attr.value);
     if(next.tagName==='INPUT'&&old.value!==next.value)old.value=next.value;
     solarPatch(old,next);
@@ -124,6 +124,77 @@ function solarHistoricalDays(attrs, mode='best') {
     if(!result[row.date]||priority[row.kind]<priority[result[row.date].kind])result[row.date]=row;
   }
   return result;
+}
+const SOLAR_TEXT = [
+ ['Солнечные панели','Solar panels','פאנלים סולאריים'],['Язык','Language','שפה'],['Авто','Auto','אוטומטי'],['Нет доступного прогноза','No forecast available','אין תחזית זמינה'],
+ ['Точность первоначального прогноза','Original forecast accuracy','דיוק התחזית המקורית'],
+ ['Пока нет завершённых дней для сравнения.','No completed days are available for comparison yet.','עדיין אין ימים שהסתיימו לצורך השוואה.'],
+ ['Нет данных за выбранный период.','No data for the selected period.','אין נתונים לתקופה שנבחרה.'],
+ ['Выберите другой период или время составления прогноза.','Choose another period or forecast issue time.','בחרו תקופה אחרת או מועד אחר ליצירת התחזית.'],
+ ['Данные появятся после завершения дня с заранее сохранённым прогнозом.','Results appear after a day with an advance forecast has ended.','התוצאות יופיעו לאחר סיום יום שעבורו נשמרה תחזית מראש.'],
+ ['Как читать показатели','Understanding the metrics','איך לקרוא את המדדים'],
+ ['Ошибка — сумма абсолютных отклонений, делённая на суммарную фактическую выработку.','Error is the sum of absolute deviations divided by total actual yield.','השגיאה היא סכום הסטיות המוחלטות חלקי סך הייצור בפועל.'],
+ ['Положительное смещение означает завышенный прогноз.','Positive bias means the forecast is too high.','הטיה חיובית מציינת תחזית גבוהה מהייצור בפועל.'],
+ ['Сравниваются только завершённые дни с известным итогом.','Only completed days with a known total are compared.','ההשוואה כוללת רק ימים שהסתיימו עם סיכום ידוע.'],
+ ['Обновление модели не меняет сохранённые прогнозы.','Recalculation does not change saved forecasts.','חישוב מחדש אינו משנה תחזיות שנשמרו.'],
+ ['Накануне, после 20:00','Previous evening, after 20:00','בערב הקודם, אחרי 20:00'],['До начала генерации','Before generation starts','לפני תחילת הייצור'],
+ ['Поздний запуск — вне оценки точности','Late start — excluded from accuracy scoring','הפעלה מאוחרת — לא נכללת במדדי הדיוק'],
+ ['Нет сохранённого первоначального прогноза. Исторический пересчёт не заменяет исходный прогноз.','No original forecast was saved. A retrospective calculation cannot replace it.','לא נשמרה תחזית מקורית. חישוב בדיעבד אינו מחליף אותה.'],
+ ['Фиксированный прогноз','Fixed forecast','תחזית קבועה'],['Зафиксированный прогноз','Fixed forecast','תחזית קבועה'],['Зафиксированный','Fixed','קבועה'],
+ ['Выработка','Yield','ייצור'],['Уточнённый итог','Updated daily estimate','הערכת ייצור יומית מעודכנת'],['О прогнозе','About this forecast','על התחזית'],
+ ['Предыдущий день','Previous day','היום הקודם'],['Предыдущий период','Previous period','התקופה הקודמת'],['Следующий период','Next period','התקופה הבאה'],
+ ['Выбрать дату','Choose date','בחירת תאריך'],['Сбросить масштаб','Reset zoom','איפוס זום'],['Сбросить Zoom','Reset zoom','איפוס זום'],
+ ['Развернуть график','Expand chart','הגדלת הגרף'],['Свернуть','Collapse','צמצום'],['Сегодня','Today','היום'],
+ ['Всё время','All time','כל התקופה'],['Неделя','Week','שבוע'],['Месяц','Month','חודש'],['Интервал','Date range','טווח תאריכים'],['День','Day','יום'],['Год','Year','שנה'],
+ ['Накануне','Previous evening','בערב הקודם'],['Утром','Morning','בבוקר'],['PV · факт','PV · actual','PV · בפועל'],['PV (факт)','PV (actual)','PV (בפועל)'],
+ ['Факт − прогноз','Actual − forecast','בפועל פחות התחזית'],['Факт − прогноз','Actual − forecast','בפועל פחות התחזית'],
+ ['Дата','Date','תאריך'],['Прогноз','Forecast','תחזית'],['Факт','Actual','בפועל'],['Версия','Version','גרסה'],
+ ['Ошибка','Error','שגיאה'],['Смещение','Bias','הטיה'],['Дней','Days','ימים'],['дней','days','ימים'],
+ ['Прогноз выработки на','Yield forecast for','תחזית ייצור עבור'],['Загрузка истории…','Loading history…','טעינת היסטוריה…'],
+ ['Нет данных за выбранную дату','No data for the selected date','אין נתונים לתאריך שנבחר'],
+ ['Мощность вчера, сегодня и прогноз','Previous day, actual and forecast power','הספק ביום הקודם, בפועל ובתחזית'],['Выработка за выбранный период','Yield for the selected period','ייצור בתקופה שנבחרה'],
+ ['Сравнение по совпадающим завершённым дням','Comparison of matching completed days','השוואת ימים תואמים שהסתיימו'],
+ ['Нет подходящих пар.','No matching days.','אין ימים תואמים.'],['Факт за доступные дни','Actual yield for available days','ייצור בפועל בימים הזמינים'],
+ ['Поздних запусков','Late starts','הפעלות מאוחרות'],['вне сравнения','excluded from comparison','לא נכללות בהשוואה'],
+ ['Пропуски не заменяются нулями.','Missing values are not replaced with zeros.','נתונים חסרים אינם מוחלפים באפסים.'],
+ ['Неполный период не является полным итогом.','A partial period is not a complete total.','תקופה חלקית אינה סיכום מלא.'],
+ ['Нажмите столбец для детализации.','Select a bar for details.','לחצו על עמודה להצגת פירוט.'],
+ ['Начало интервала должно быть не позже конца.','The start date must not be after the end date.','תאריך ההתחלה אינו יכול להיות אחרי תאריך הסיום.'],
+ ['Выберите интервал не больше 10 лет.','Choose a range of no more than 10 years.','בחרו טווח של עד 10 שנים.'],
+ ['исторический прогноз','fixed forecast','תחזית קבועה'],['текущий прогноз','current forecast','תחזית נוכחית'],['нет данных','no data','אין נתונים'],
+ ['дней с данными','days with data','ימים עם נתונים'],['дней факта','actual days','ימים עם נתוני אמת'],['дней прогноза','forecast days','ימים עם תחזית'],
+ ['факт','actual','בפועל'],['прогноз','forecast','תחזית'],['кВт·ч','kWh','קוט״ש'],['кВт','kW','קילוואט'],
+ ['Пропуск измерений — соединение для ориентира','Missing measurements — visual guide only','מדידות חסרות — חיבור להמחשה בלבד'],
+ ['Энергия за 15 мин','Energy per 15 min','אנרגיה ב־15 דקות'],['Отклонение','Deviation','סטייה'],
+ ['Не удалось обновить погоду','Weather update failed','עדכון מזג האוויר נכשל'],['причина не указана','no reason provided','לא צוינה סיבה'],
+ ['Срок действия предыдущего прогноза истёк.','The previous forecast has expired.','תוקף התחזית הקודמת פג.'],
+ ['Показан предыдущий прогноз — данные устарели.','Showing the previous forecast — weather data is stale.','מוצגת התחזית הקודמת — נתוני מזג האוויר אינם עדכניים.'],
+ ['Последняя загрузка','Last update','עדכון אחרון'],['История','History','היסטוריה'],
+ ['Дальний ансамблевый прогноз — точность ниже','Long-range ensemble forecast — lower confidence','תחזית אנסמבל לטווח ארוך — ודאות נמוכה יותר'],['Основной прогноз погоды','Main weather forecast','תחזית מזג האוויר הראשית'],
+ ['Помощь по графику','Chart help','עזרה לגרף'],
+ ['Разведите два пальца для увеличения. Перемещайте увеличенный график пальцем. Двойное нажатие сбрасывает масштаб.','Pinch to zoom. Drag to pan a zoomed chart. Double-tap to reset.','הרחיקו שתי אצבעות להגדלה. גררו כדי להזיז גרף מוגדל. הקשה כפולה מאפסת את הזום.'],
+ ['Мощность усредняется за 15 минут. Короткие пропуски до 10 минут восстанавливаются между соседними измерениями; более длинные остаются пустыми.','Power is averaged over 15 minutes. Gaps up to 10 minutes are interpolated between adjacent readings; longer gaps stay empty.','ההספק הוא ממוצע של 15 דקות. פערים עד 10 דקות מושלמים בין מדידות סמוכות; פערים ארוכים יותר נשארים ריקים.'],
+ ['Полосатые столбцы — дальний прогноз с меньшей точностью.','Striped bars indicate a less certain long-range forecast.','עמודות מפוספסות מציינות תחזית רחוקה עם ודאות נמוכה יותר.'],
+ ['С','From','מתאריך'],['По','To','עד תאריך']
+];
+function solarLanguage(hass, choice='auto') {
+  const requested=choice==='auto'?String(hass?.locale?.language||hass?.language||'en').toLowerCase():choice;
+  return requested.startsWith('ru')?'ru':requested.startsWith('he')?'he':'en';
+}
+function solarTranslate(text, language) {
+  if(language==='ru')return text;
+  const map=new Map(SOLAR_TEXT.map(row=>[row[0],row[language==='he'?2:1]]));
+  if(map.has(text.trim()))return text.replace(text.trim(),map.get(text.trim()));
+  const keys=[...map.keys()].filter(k=>k.length>2).sort((a,b)=>b.length-a.length);
+  const pattern=keys.map(k=>k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+  return text.replace(new RegExp(pattern,'g'),key=>map.get(key));
+}
+function solarTranslateDOM(root, language) {
+  for(const el of root.querySelectorAll('*')){
+    if(['STYLE','SCRIPT'].includes(el.tagName)||el.matches('[data-user-title], .language-picker'))continue;
+    for(const child of el.childNodes)if(child.nodeType===3)child.textContent=solarTranslate(child.textContent,language);
+    for(const attr of ['title','aria-label'])if(el.hasAttribute(attr))el.setAttribute(attr,solarTranslate(el.getAttribute(attr),language));
+  }
 }
 class SolarComparisonCard extends HTMLElement {
   connectedCallback() {
@@ -162,11 +233,16 @@ class SolarComparisonCard extends HTMLElement {
       this._date = today;
       this._fetch();
     }
-    if (!previous || [this.config.forecast_entity, this.config.day_forecast_entity].some(id => previous.states[id] !== hass.states[id])) this._render();
+    if (!previous || previous.language!==hass.language || previous.locale?.language!==hass.locale?.language || [this.config.forecast_entity, this.config.day_forecast_entity].some(id => previous.states[id] !== hass.states[id])) this._render();
   }
   _timeZone(){
     return this.config?.time_zone||this._hass?.states?.[this.config?.day_forecast_entity]?.attributes?.site_configuration?.time_zone||this._hass?.config?.time_zone||Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
   }
+  _languageChoice(){
+    if(this._chosenLanguage)return this._chosenLanguage;
+    try{return this.config.language||localStorage.getItem('solar-yield-language')||'auto';}catch{return this.config.language||'auto';}
+  }
+  _language(){return solarLanguage(this._hass,this._languageChoice());}
   async _fetch() {
     if (!this._hass || this._period!=='day') return;
     const request=(this._request||0)+1;this._request=request;
@@ -232,6 +308,7 @@ class SolarComparisonCard extends HTMLElement {
       const d=new Date(p.time),a=f.format(d).split(':').map(Number);
       return [a[0]+a[1]/60,Number(p.power_w)];
     }).filter(p=>p.every(Number.isFinite));
+    this._originalSeries=original;
     this._series=series;
     const max=Math.max(1000,...series.flat().map(p=>p[1]),...(this._hideOriginal?[]:original.map(p=>p[1])))*1.08;
     const W=Math.max(240,Math.round(this.getBoundingClientRect().width||850)-32),H=this.config?.size==='compact'?260:350,l=52,r=26,t=28,b=40;
@@ -264,7 +341,7 @@ class SolarComparisonCard extends HTMLElement {
     svg+='</g>';
     svg+='<line class="cursorline" x1="0" y1="'+t+'" x2="0" y2="'+(H-b)+'" stroke="currentColor" stroke-dasharray="4 4" opacity="0"/>';
     svg+='</svg>';
-    return svg;
+    return solarTranslate(svg,this._language());
   }
   _forecastSummary(esc){
     const attrs=this._hass.states[this.config.day_forecast_entity]?.attributes||{};
@@ -278,10 +355,14 @@ class SolarComparisonCard extends HTMLElement {
     const attrs=this._hass.states[this.config.day_forecast_entity]?.attributes||{};
     const days=this._accuracyDays||30,kind=this._cohort||'day_ahead';
     const today=solarDay(new Date(),this._timeZone()),start=solarShift(today,-days);
-    const rows=(attrs.forecast_ledger_history||[]).filter(r=>r.kind===kind&&r.date>=start&&r.date<today).reverse();
+    const all=(attrs.forecast_ledger_history||[]).filter(r=>r.completed&&['morning','day_ahead'].includes(r.kind));
+    const rows=all.filter(r=>r.kind===kind&&r.date>=start&&r.date<today).reverse();
+    if(!all.length)return '<section class="accuracy-empty"><h3>Точность первоначального прогноза</h3><p>Пока нет завершённых дней для сравнения.</p><p class="small">Данные появятся после завершения дня с заранее сохранённым прогнозом.</p></section>';
     const summary=attrs.forecast_ledger_summary?.[kind+'_'+days]||{};
     const fmt=v=>v!=null&&Number.isFinite(Number(v))?Number(v).toFixed(1):'—';
-    return `<section><h3>Точность первоначального прогноза</h3><div class="tools">${[7,30].map(n=>'<button data-accuracy-days="'+n+'" aria-pressed="'+(n===days)+'">'+n+' дней</button>').join('')}${[['day_ahead','Накануне'],['morning','Утром']].map(([k,label])=>'<button data-cohort="'+k+'" aria-pressed="'+(kind===k)+'">'+label+'</button>').join('')}</div><p>Ошибка WAPE: <b>${fmt(summary.wape_percent)}%</b> · Смещение: ${fmt(summary.bias_percent)}% · Дней: ${summary.samples||0}</p><div style="overflow-x:auto"><table style="width:100%;text-align:right;border-collapse:collapse"><thead><tr><th>Дата</th><th>Прогноз</th><th>Факт</th><th>Факт − прогноз</th><th>Версия</th></tr></thead><tbody>${rows.map(r=>'<tr><td>'+esc(r.date)+'</td><td>'+fmt(r.kwh)+'</td><td>'+fmt(r.actual_kwh)+'</td><td>'+fmt(r.deviation_kwh)+' кВт·ч / '+fmt(r.deviation_percent)+'%</td><td>'+esc(r.version)+'</td></tr>').join('')}</tbody></table></div><p class="small">${rows.length?'':'История начнёт появляться после завершения дней с сохранённым прогнозом. '}Положительное смещение: прогноз завышен. WAPE — ошибка суточной энергии, не формы графика. Факт берётся с суточного счётчика; полнота его данных отдельно не подтверждена. Уменьшение ошибки не доказывает обучение: погода тоже меняется.</p></section>`;
+    const controls='<div class="accuracy-controls"><div role="group" aria-label="Интервал">'+[7,30].map(n=>'<button data-accuracy-days="'+n+'" aria-pressed="'+(n===days)+'">'+n+' дней</button>').join('')+'</div><div role="group" aria-label="Прогноз">'+[['day_ahead','Накануне'],['morning','Утром']].map(([k,label])=>'<button data-cohort="'+k+'" aria-pressed="'+(kind===k)+'">'+label+'</button>').join('')+'</div></div>';
+    const table=rows.length?'<p>Ошибка: <b>'+fmt(summary.wape_percent)+'%</b> · Смещение: '+fmt(summary.bias_percent)+'% · Дней: '+(summary.samples||0)+'</p><div style="overflow-x:auto"><table><thead><tr><th>Дата</th><th>Прогноз</th><th>Факт</th><th>Факт − прогноз</th></tr></thead><tbody>'+rows.map(r=>'<tr><td><button data-open-day="'+esc(r.date)+'">'+esc(r.date)+'</button></td><td>'+fmt(r.kwh)+'</td><td>'+fmt(r.actual_kwh)+'</td><td>'+fmt(r.deviation_kwh)+' кВт·ч / '+fmt(r.deviation_percent)+'%</td></tr>').join('')+'</tbody></table></div>':'<p class="accuracy-empty">Нет данных за выбранный период.</p><p class="small">Выберите другой период или время составления прогноза.</p>';
+    return '<section><h3>Точность первоначального прогноза</h3>'+controls+table+'<details class="chart-help"><summary>Как читать показатели</summary><p>Ошибка — сумма абсолютных отклонений, делённая на суммарную фактическую выработку.</p><p>Положительное смещение означает завышенный прогноз.</p><p>Сравниваются только завершённые дни с известным итогом.</p><p>Обновление модели не меняет сохранённые прогнозы.</p></details></section>';
   }
   _render(){
     if(!this._root||!this._hass||this._touching)return;
@@ -353,7 +434,10 @@ class SolarComparisonCard extends HTMLElement {
       th,td{padding:10px 8px;border-bottom:1px solid var(--divider-color,#eee);font-size:12px;white-space:nowrap}th{font-weight:500;color:var(--secondary-text-color,#777)}
       .period-comparison{margin:20px 0 8px;padding:16px;background:var(--secondary-background-color,#fafafa);border-radius:8px;line-height:1.7}
       @container(max-width:540px){ha-card{padding:18px 12px}.yield-kpi{padding:0 6px}.yield-kpi span{font-size:12px}.date-nav input{font-size:18px}}
-      </style><ha-card><h3>${esc(this.config.title)}</h3>
+      .language-bar{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:12px;margin-bottom:12px}.language-picker{font:inherit;color:inherit;background:var(--card-background-color,white);border:1px solid var(--divider-color,#ddd);border-radius:8px;min-height:36px;padding:4px 8px}
+      .accuracy-controls{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}.accuracy-controls>div{display:flex;border-radius:24px;background:var(--secondary-background-color,#f6f6f6);padding:3px}.accuracy-controls button[aria-pressed=true]{background:#fff0df;color:#e87516;font-weight:600}.accuracy-controls button[aria-pressed=false]{opacity:.7}.accuracy-empty{color:var(--secondary-text-color,#777)}
+      .chart-help{margin:20px 0;font-size:12px;line-height:1.7;color:var(--secondary-text-color,#777)}summary{cursor:pointer}table{width:100%;text-align:end;border-collapse:collapse}.yield-summary{direction:inherit}[dir=rtl] .yield-kpi+ .yield-kpi{border-left:0;border-right:1px solid var(--divider-color,#eee)}svg,input[type=date]{direction:ltr}
+      </style><ha-card lang="${this._language()}" dir="${this._language()==='he'?'rtl':'ltr'}"><div class="language-bar"><label for="solar-language">Язык</label><select id="solar-language" class="language-picker" aria-label="Язык">${[['auto','Авто'],['ru','Русский'],['en','English'],['he','עברית']].map(([k,label])=>'<option value="'+k+'" '+(this._languageChoice()===k?'selected':'')+'>'+label+'</option>').join('')}</select></div><h3 ${this.config.title!=='Солнечные панели'?'data-user-title':''}>${esc(this.config.title)}</h3>
       <div class="periods">${[['day','День'],['week','Неделя'],['month','Месяц'],['year','Год'],['range','Интервал'],['all','Всё время']].map(([key,label])=>`<button data-period="${key}" aria-pressed="${this._period===key}">${label}</button>`).join('')}</div>
       <div class="date-nav"><button data-step="-1" aria-label="Предыдущий период" ${['all','range'].includes(this._period)?'disabled':''}>❮</button><input aria-label="Выбрать дату" type="date" value="${this._selected}"><button data-step="1" aria-label="Следующий период" ${['all','range'].includes(this._period)?'disabled':''}>❯</button></div>
       ${this._period==='range'?'<div class="tools"><label>С <input class="range-start" type="date" value="'+(this._rangeStart||solarShift(this._selected,-29))+'"></label><label>По <input class="range-end" type="date" value="'+(this._rangeEnd||this._selected)+'"></label></div>':''}
@@ -362,15 +446,17 @@ class SolarComparisonCard extends HTMLElement {
       ${this._period==='day'?this._forecastSummary(esc):''}
       <div class="chart-wrap ${this._view[1]-this._view[0]<24?'zoomed':''}">${this._period==='day'?this._svg():this._energySvg()}<div class="chart-tooltip"></div></div>
       <div class="legend">${['Предыдущий день','PV · факт','Прогноз'].map((label,i)=>`<button ${i===0&&this._period!=='day'?'hidden':''} data-toggle="${i}" aria-pressed="${this._visible[i]}" style="--series:${['#3478f6','#ff9e3d','#16a06a'][i]}"><span class="toggle"></span>${label}</button>`).join('')}<button class="original-toggle" aria-pressed="${!this._hideOriginal}" style="--series:#a855f7"><span class="toggle"></span>Фиксированный прогноз</button></div>
-      ${this._period==='day'&&!this._series.some(x=>x.length)?'<div class="empty">Нет данных за выбранную дату</div>':''}
+      ${this._period==='day'&&!this._series.some(x=>x.length)&&(this._hideOriginal||!this._originalSeries?.length)?'<div class="empty">Нет данных за выбранную дату</div>':''}
       ${weatherStatus==='stale'?'<div class="weather-warning" role="status" style="padding:12px;background:var(--warning-color,#ffb300);color:#212121;border-radius:8px">Не удалось обновить погоду: '+esc(todayForecast?.attributes?.last_refresh_error?.message||'причина не указана')+'. '+(todayForecast?.state==='unavailable'?'Срок действия предыдущего прогноза истёк.':'Показан предыдущий прогноз — данные устарели.')+' Последняя загрузка: '+esc(weatherUpdated||'—')+'</div>':''}
       ${this._loading?'<div class="small">Загрузка истории…</div>':''}
       <div class="forecast-head"><h3 class="more">Прогноз выработки на ${this._forecastRange===30?'30':'8'} дней <span class="unit">· кВт·ч</span></h3><div class="forecast-range"><button data-forecast-range="8" aria-pressed="${this._forecastRange!==30}">8 дней</button><button data-forecast-range="30" aria-pressed="${this._forecastRange===30}">Месяц</button></div></div>
-      <div class="bars ${this._forecastRange===30?'month':''}">${days.map(d=>`<div class="day ${d.source==='ensemble'?'ensemble':''}" title="${d.source==='ensemble'?'Дальний ансамблевый прогноз — точность ниже':'Основной прогноз погоды'}"><b>${esc(d.kwh)} </b><div class="bar" style="height:${Math.max(2,100*(Number(d.kwh)||0)/max)}px"></div><span>${esc((d.date||'').slice(5))}</span></div>`).join('')}</div>
+      <div class="bars ${this._forecastRange===30?'month':''}">${days.map(d=>`<div role="button" tabindex="0" data-open-day="${esc(d.date)}" class="day ${d.source==='ensemble'?'ensemble':''}" title="${d.source==='ensemble'?'Дальний ансамблевый прогноз — точность ниже':'Основной прогноз погоды'}"><b>${esc(d.kwh)} </b><div class="bar" style="height:${Math.max(2,100*(Number(d.kwh)||0)/max)}px"></div><span>${esc((d.date||'').slice(5))}</span></div>`).join('')}</div>
+      ${!days.length?'<p class="empty">Нет доступного прогноза</p>':''}
       ${this._accuracy(esc)}
-      <p class="small">Разведите два пальца для увеличения графика дня; после увеличения перемещайте его пальцем. Двойное нажатие сбрасывает масштаб. Мощность усреднена за 15 минут. ${this.config.smooth!==false?'Линии сглажены; значения в подсказках и энергия рассчитаны по исходным точкам. ':''}Технические пропуски до 10 минут линейно восстанавливаются между соседними измерениями; более длинные пропуски остаются пустыми. Полосатые столбцы после основного горизонта — менее точный ансамблевый прогноз GFS.</p>
+      <details class="chart-help"><summary>Помощь по графику</summary><p>Разведите два пальца для увеличения. Перемещайте увеличенный график пальцем. Двойное нажатие сбрасывает масштаб.</p><p>Мощность усредняется за 15 минут. Короткие пропуски до 10 минут восстанавливаются между соседними измерениями; более длинные остаются пустыми.</p><p>Полосатые столбцы — дальний прогноз с меньшей точностью.</p></details>
       ${this._error?'<p class="small">История: '+esc(this._error)+'</p>':''}
       </ha-card>`;
+    solarTranslateDOM(template.content,this._language());
     solarPatch(this._root,template.content);
     for(const [el,x,y] of scroll){el.scrollLeft=x;el.scrollTop=y;}
     this._bindControls();
@@ -395,6 +481,9 @@ class SolarComparisonCard extends HTMLElement {
         tip.innerHTML='<b>'+String((timeHour+Math.floor(timeMin/60))%24).padStart(2,'0')+':'+String(timeMin%60).padStart(2,'0')+'</b><div><span aria-hidden="true" style="color:#3478f6">●</span> Предыдущий день: '+(values[0]===null?'—':(values[0]/1000).toFixed(2)+' кВт')+'</div><div><span aria-hidden="true" style="color:#e0aa12">●</span> PV (факт): '+(values[1]===null?'—':(values[1]/1000).toFixed(2)+' кВт')+'</div><div><span aria-hidden="true" style="color:#16a06a">●</span> Прогноз: '+(values[2]===null?'—':(values[2]/1000).toFixed(2)+' кВт')+'</div>';
         if(values[1]!==null) tip.innerHTML+='<div>Энергия за 15 мин: '+(values[1]/4000).toFixed(3)+' кВт·ч</div>';
         if(values[1]!==null && values[2]>0) tip.innerHTML+='<div>Отклонение: '+(100*(values[1]-values[2])/values[2]).toFixed(1)+'%</div>';
+        const fixed=this._hideOriginal?null:near(this._originalSeries);
+        if(fixed!==null)tip.innerHTML+='<div>Фиксированный прогноз: '+(fixed/1000).toFixed(2)+' кВт</div>';
+        solarTranslateDOM(tip,this._language());
         tip.style.display='block';
         tip.style.left=Math.max(0,Math.min(rect.width-tip.offsetWidth,(ev.clientX-rect.left)+12))+'px';
         tip.style.top='8px';
@@ -412,6 +501,9 @@ class SolarComparisonCard extends HTMLElement {
     this._fetch();this._render();
   }
   _bindControls(){
+    this._root.querySelectorAll('[data-open-day]').forEach(el=>{const open=()=>this._select(el.dataset.openDay,'day');el.onclick=open;el.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();open();}};});
+    const picker=this._root.querySelector('.language-picker');
+    if(picker)picker.onchange=ev=>{this._chosenLanguage=ev.target.value;try{localStorage.setItem('solar-yield-language',this._chosenLanguage);}catch{}this._render();};
     this._root.querySelectorAll('[data-period]').forEach(el=>el.onclick=()=>this._select(this._selected,el.dataset.period));
     this._root.querySelectorAll('[data-step]').forEach(el=>el.onclick=()=>this._select(solarShift(this._selected,Number(el.dataset.step)*(this._period==='week'?7:1),this._period)));
     this._root.querySelector('input[type=date]').onchange=ev=>this._select(ev.target.value);
@@ -601,7 +693,8 @@ class SolarYieldForecastPanel extends HTMLElement {
   get hass(){return this._hass;}
   _config(){return this._panel?.config||{};}
   _settingsLabel(){
-    const language=String(this._hass?.language||'en').toLowerCase();
+    let choice='auto';try{choice=localStorage.getItem('solar-yield-language')||'auto';}catch{}
+    const language=solarLanguage(this._hass,choice);
     return language.startsWith('ru')?'Настройки':language.startsWith('he')?'הגדרות':'Settings';
   }
   _openSettings(){

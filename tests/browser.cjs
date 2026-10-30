@@ -18,7 +18,7 @@ const fs=require('node:fs');
    for(let t=now-54*3600000;t<now;t+=60000)rows.push({last_changed:new Date(t).toISOString(),state:'4000'});
    const points=Array.from({length:216},(_,i)=>({time:new Date(now-54*3600000+i*900000).toISOString(),power_w:4500+3000*Math.sin(i/12)}));
    const hass={states:{'sensor.total_dc_power':{attributes:{unit_of_measurement:'W'}},'sensor.solar_yield_forecast_today':{attributes:{daily_forecast:Array.from({length:30},(_,i)=>({date:new Date(Date.UTC(2026,9,22+i)).toISOString().slice(0,10),kwh:100+i,source:i>=16?'ensemble':'weather'}))}},'sensor.solar_yield_forecast_power_profile_today':{attributes:{points:[{time:'invalid',power_w:null},...points]}}},callApi:async(method,url)=>url.startsWith('solar_yield_forecast/profile/')?{points}:[rows]};
-   window.fixture=hass;card.hass=hass;
+   hass.language='ru';window.fixture=hass;card.hass=hass;
  });
  for(const width of [360,850,1400]){
    await page.setViewportSize({width,height:900});await page.waitForTimeout(150);
@@ -46,6 +46,26 @@ const fs=require('node:fs');
    await page.evaluate(()=>document.querySelector('solar-comparison-card').hass={...window.fixture});
    assert.equal(await page.locator('.chart-tooltip').evaluate(e=>e.style.display),'block');
  }
+ await page.locator('.language-picker').selectOption('en');
+ assert.equal(await page.locator('ha-card').getAttribute('lang'),'en');
+ assert.match(await page.locator('.legend').innerText(),/Fixed forecast/);
+ const englishText=await page.locator('ha-card').evaluate(el=>{const copy=el.cloneNode(true);copy.querySelector('.language-bar')?.remove();return copy.textContent;});
+ assert.doesNotMatch(englishText,/[А-Яа-яЁё]/);
+ assert.equal(await page.locator('.accuracy-empty table').count(),0);
+ await page.locator('.language-picker').selectOption('he');
+ assert.equal(await page.locator('ha-card').getAttribute('dir'),'rtl');
+ assert.match(await page.locator('.legend').innerText(),/תחזית/);
+ const hebrewText=await page.locator('ha-card').evaluate(el=>{const copy=el.cloneNode(true);copy.querySelector('.language-bar')?.remove();return copy.textContent;});
+ assert.doesNotMatch(hebrewText,/[А-Яа-яЁё]/);
+ await page.locator('[data-period="range"]').click();
+ assert.ok(await page.locator('.range-start').count());
+ await page.locator('.language-picker').selectOption('auto');
+ await page.evaluate(()=>{const c=document.querySelector('solar-comparison-card');c.hass={...window.fixture,locale:{language:'en'}};});
+ assert.equal(await page.locator('ha-card').getAttribute('lang'),'en');
+ await page.evaluate(()=>{const c=document.querySelector('solar-comparison-card');c.hass={...window.fixture,locale:{language:'he'}};});
+ assert.equal(await page.locator('ha-card').getAttribute('dir'),'rtl');
+ await page.evaluate(()=>{document.querySelector('solar-comparison-card').hass=window.fixture;});
+ await page.locator('[data-period="day"]').click();
  await page.evaluate(()=>{
    const c=document.querySelector('solar-comparison-card');
    const a=window.fixture.states['sensor.solar_yield_forecast_today'].attributes;
@@ -65,7 +85,7 @@ const fs=require('node:fs');
  await page.evaluate(()=>document.querySelector('solar-comparison-card').hass={...window.fixture});
  assert.equal(await page.locator('.original-line').count(),0);
  await page.locator('[data-cohort="morning"]').click();
- assert.doesNotMatch(await page.locator('section tbody').innerText(),/2026-10-23/);
+ assert.equal(await page.locator('section tbody').count(),0);
  await page.locator('[data-cohort="day_ahead"]').click();
  await page.evaluate(()=>{
    const fixture=window.fixture;

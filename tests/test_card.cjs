@@ -6,6 +6,20 @@ const source=fs.readFileSync('custom_components/solar_yield_forecast/frontend/so
 const ctx={HTMLElement:class{},customElements:{get(){},define(){}},window:{}};
 vm.createContext(ctx);vm.runInContext(source,ctx);
 const row=(minutes,state)=>({last_updated:new Date(minutes*60000).toISOString(),state:String(state)});
+test('language modes follow HA locale and use safe fallback',()=>{
+ assert.equal(ctx.solarLanguage({locale:{language:'he-IL'},language:'ru'},'auto'),'he');
+ assert.equal(ctx.solarLanguage({language:'en'},'ru'),'ru');
+ assert.equal(ctx.solarLanguage({language:'de'},'auto'),'en');
+ assert.equal(ctx.solarTranslate('Фиксированный прогноз','en'),'Fixed forecast');
+ assert.equal(ctx.solarTranslate('Месяц','he'),'חודש');
+ assert.equal(ctx.solarTranslate('Факт: 93.2 кВт·ч','en'),'Actual: 93.2 kWh');
+ assert.equal(ctx.solarTranslate('Солнечные панели','ru'),'Солнечные панели');
+});
+test('accuracy empty state hides inert table and meaningless counters',()=>{
+ const html=vm.runInContext(`SolarComparisonCard.prototype._accuracy.call({_hass:{states:{e:{attributes:{}}}},config:{day_forecast_entity:'e'},_timeZone:()=>'UTC'},s=>s)`,ctx);
+ assert.match(html,/Пока нет завершённых дней/);
+ assert.doesNotMatch(html,/<table|data-cohort|WAPE/);
+});
 test('historical originals preserve priority, zero, gaps and explicit cohorts',()=>{
  const attrs={forecast_ledger_history:[{date:'2020-01-01',kind:'morning',kwh:8},{date:'2020-01-01',kind:'day_ahead',kwh:10},{date:'2020-01-02',kind:'day_ahead',kwh:0}],legacy_forecast_history:[{date:'2020-01-01',kind:'legacy',kwh:90}]};
  assert.equal(ctx.solarHistoricalDays(attrs)['2020-01-01'].kwh,10);
