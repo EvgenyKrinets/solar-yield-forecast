@@ -473,7 +473,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         local = now.astimezone(self.tz)
         today = local.date().isoformat()
         previous_count = sum(len(v) for v in self.forecast_ledger.values())
-        capture(self.forecast_ledger, result, now, self.tz, '1.6.2',
+        capture(self.forecast_ledger, result, now, self.tz, '1.7.0',
                 self._archive_signature(), self.weather_updated_at)
         result['forecast_ledger_history'], result['forecast_ledger_summary'] = score(
             self.forecast_ledger, self.actuals, today)

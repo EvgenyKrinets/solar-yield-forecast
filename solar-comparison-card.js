@@ -640,7 +640,7 @@ class SolarComparisonCompactCard extends SolarComparisonCard {
 }
 if(!customElements.get('solar-comparison-compact')) customElements.define('solar-comparison-compact', SolarComparisonCompactCard);
 
-const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-6-2';
+const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-7-0';
 const SOLAR_MANAGED_DASHBOARD='solar-yield-forecast-dashboard';
 
 function solarPanelCardConfig(config={}) {
