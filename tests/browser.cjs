@@ -90,6 +90,8 @@ const fs=require('node:fs');
  assert.equal(await page.locator('.original-toggle .toggle').count(),1);
  assert.match(await page.locator('section').innerText(),/2026-10-23/);
  assert.match(await page.locator('.summary').innerText(),/100.0/);
+ assert.doesNotMatch(await page.locator('.snapshot-info').innerText(),/v1\.6\.0|v1\.7|1\.6\.0/);
+ assert.ok(await page.locator('.installed-version').count());
  await page.locator('.original-toggle').click();
  assert.equal(await page.locator('.original-line').count(),0);
  assert.equal(await page.locator('.original-toggle').getAttribute('aria-pressed'),'false');

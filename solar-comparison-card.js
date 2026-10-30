@@ -126,6 +126,7 @@ function solarHistoricalDays(attrs, mode='best') {
   return result;
 }
 const SOLAR_TEXT = [
+ ['Версия интеграции','Integration version','גרסת האינטגרציה'],
  ['Солнечные панели','Solar panels','פאנלים סולאריים'],['Язык','Language','שפה'],['Авто','Auto','אוטומטי'],['Нет доступного прогноза','No forecast available','אין תחזית זמינה'],
  ['Точность первоначального прогноза','Original forecast accuracy','דיוק התחזית המקורית'],
  ['Пока нет завершённых дней для сравнения.','No completed days are available for comparison yet.','עדיין אין ימים שהסתיימו לצורך השוואה.'],
@@ -349,7 +350,7 @@ class SolarComparisonCard extends HTMLElement {
     const actual=attrs.daily_actuals?.[this._selected];
     const current=this._selected===solarDay(new Date(),this._timeZone())?this._hass.states[this.config.day_forecast_entity]?.state:null;
     const fmt=v=>v!=null&&Number.isFinite(Number(v))?Number(v).toFixed(1)+' кВт·ч':'—';
-    return `<div class="summary yield-summary"><div class="yield-kpi actual-kpi"><span>Выработка · кВт·ч</span><b>${fmt(actual).replace(' кВт·ч','')}</b></div><div class="yield-kpi fixed-kpi"><span>Фиксированный прогноз · кВт·ч</span><b>${fmt(original?.kwh).replace(' кВт·ч','')}</b></div></div>${current!==null?'<div class="live-estimate">Уточнённый итог <b>'+fmt(current)+'</b></div>':''}<details class="snapshot-info"><summary>О прогнозе</summary><p class="small">${original?esc(({day_ahead:'Накануне, после 20:00',morning:'До начала генерации',late_start:'Поздний запуск — вне оценки точности'})[original.kind]||original.kind)+' · '+esc(new Date(original.recorded_at).toLocaleString('ru-RU',{timeZone:this._timeZone()}))+' · v'+esc(original.version):'Нет сохранённого первоначального прогноза. Исторический пересчёт не заменяет исходный прогноз.'}</p></details>`;
+    return `<div class="summary yield-summary"><div class="yield-kpi actual-kpi"><span>Выработка · кВт·ч</span><b>${fmt(actual).replace(' кВт·ч','')}</b></div><div class="yield-kpi fixed-kpi"><span>Фиксированный прогноз · кВт·ч</span><b>${fmt(original?.kwh).replace(' кВт·ч','')}</b></div></div>${current!==null?'<div class="live-estimate">Уточнённый итог <b>'+fmt(current)+'</b></div>':''}<details class="snapshot-info"><summary>О прогнозе</summary><p class="small">${original?esc(({day_ahead:'Накануне, после 20:00',morning:'До начала генерации',late_start:'Поздний запуск — вне оценки точности'})[original.kind]||original.kind)+' · '+esc(new Date(original.recorded_at).toLocaleString('ru-RU',{timeZone:this._timeZone()})):'Нет сохранённого первоначального прогноза. Исторический пересчёт не заменяет исходный прогноз.'}</p></details>`;
   }
   _accuracy(esc){
     const attrs=this._hass.states[this.config.day_forecast_entity]?.attributes||{};
@@ -437,7 +438,7 @@ class SolarComparisonCard extends HTMLElement {
       .language-bar{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:12px;margin-bottom:12px}.language-picker{font:inherit;color:inherit;background:var(--card-background-color,white);border:1px solid var(--divider-color,#ddd);border-radius:8px;min-height:36px;padding:4px 8px}
       .accuracy-controls{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}.accuracy-controls>div{display:flex;border-radius:24px;background:var(--secondary-background-color,#f6f6f6);padding:3px}.accuracy-controls button[aria-pressed=true]{background:#fff0df;color:#e87516;font-weight:600}.accuracy-controls button[aria-pressed=false]{opacity:.7}.accuracy-empty{color:var(--secondary-text-color,#777)}
       .chart-help{margin:20px 0;font-size:12px;line-height:1.7;color:var(--secondary-text-color,#777)}summary{cursor:pointer}table{width:100%;text-align:end;border-collapse:collapse}.yield-summary{direction:inherit}[dir=rtl] .yield-kpi+ .yield-kpi{border-left:0;border-right:1px solid var(--divider-color,#eee)}svg,input[type=date]{direction:ltr}
-      </style><ha-card lang="${this._language()}" dir="${this._language()==='he'?'rtl':'ltr'}"><div class="language-bar"><label for="solar-language">Язык</label><select id="solar-language" class="language-picker" aria-label="Язык">${[['auto','Авто'],['ru','Русский'],['en','English'],['he','עברית']].map(([k,label])=>'<option value="'+k+'" '+(this._languageChoice()===k?'selected':'')+'>'+label+'</option>').join('')}</select></div><h3 ${this.config.title!=='Солнечные панели'?'data-user-title':''}>${esc(this.config.title)}</h3>
+      </style><ha-card lang="${this._language()}" dir="${this._language()==='he'?'rtl':'ltr'}"><div class="language-bar"><span class="installed-version" style="margin-inline-end:auto">Версия интеграции: ${esc(todayForecast?.attributes?.integration_version||'—')}</span><label for="solar-language">Язык</label><select id="solar-language" class="language-picker" aria-label="Язык">${[['auto','Авто'],['ru','Русский'],['en','English'],['he','עברית']].map(([k,label])=>'<option value="'+k+'" '+(this._languageChoice()===k?'selected':'')+'>'+label+'</option>').join('')}</select></div><h3 ${this.config.title!=='Солнечные панели'?'data-user-title':''}>${esc(this.config.title)}</h3>
       <div class="periods">${[['day','День'],['week','Неделя'],['month','Месяц'],['year','Год'],['range','Интервал'],['all','Всё время']].map(([key,label])=>`<button data-period="${key}" aria-pressed="${this._period===key}">${label}</button>`).join('')}</div>
       <div class="date-nav"><button data-step="-1" aria-label="Предыдущий период" ${['all','range'].includes(this._period)?'disabled':''}>❮</button><input aria-label="Выбрать дату" type="date" value="${this._selected}"><button data-step="1" aria-label="Следующий период" ${['all','range'].includes(this._period)?'disabled':''}>❯</button></div>
       ${this._period==='range'?'<div class="tools"><label>С <input class="range-start" type="date" value="'+(this._rangeStart||solarShift(this._selected,-29))+'"></label><label>По <input class="range-end" type="date" value="'+(this._rangeEnd||this._selected)+'"></label></div>':''}
@@ -640,7 +641,7 @@ class SolarComparisonCompactCard extends SolarComparisonCard {
 }
 if(!customElements.get('solar-comparison-compact')) customElements.define('solar-comparison-compact', SolarComparisonCompactCard);
 
-const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-7-0';
+const SOLAR_PANEL_TAG='solar-yield-forecast-panel-v1-7-1';
 const SOLAR_MANAGED_DASHBOARD='solar-yield-forecast-dashboard';
 
 function solarPanelCardConfig(config={}) {

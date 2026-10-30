@@ -73,7 +73,8 @@ class SolarYieldEntity(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         values = self.coordinator.data or {}
-        attrs = {'forecast_updated_at':values.get('weather_updated_at') or values.get('updated_at'),
+        attrs = {'integration_version': values.get('integration_version'),
+            'forecast_updated_at':values.get('weather_updated_at') or values.get('updated_at'),
             'weather_status':values.get('weather_status'),
             'last_refresh_error':values.get('last_refresh_error')}
         if self.key in ('model_status','recalculation_status'):

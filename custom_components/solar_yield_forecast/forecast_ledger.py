@@ -2,6 +2,33 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, time
 import math
+from email.utils import parsedate_to_datetime
+
+
+def retry_delay(error, now):
+    """Respect a provider's longer Retry-After, if one was reported."""
+    delay=300
+    for request in (error or {}).get('requests', []):
+        value=request.get('retry_after')
+        if not value:
+            continue
+        try:
+            seconds=float(value)
+        except (ValueError,TypeError):
+            try:
+                seconds=(parsedate_to_datetime(value)-now).total_seconds()
+            except (ValueError,TypeError,OverflowError):
+                continue
+        if math.isfinite(seconds):
+            delay=max(delay,seconds)
+    return delay
+
+
+def evening_pending(ledger, now, tz):
+    """Retry only within the local evening window, until a snapshot exists."""
+    local = now.astimezone(tz)
+    tomorrow = (local.date()+timedelta(days=1)).isoformat()
+    return local.hour >= 20 and 'day_ahead' not in ledger.get(tomorrow, {})
 
 
 def capture(ledger, result, now, tz, version, signature, weather_at):

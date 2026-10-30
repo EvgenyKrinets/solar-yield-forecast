@@ -85,3 +85,24 @@ def test_originals_survive_for_yearly_review_but_expire_after_two_years():
     ledger.capture(data,fixture(now,tz),now,tz,'v','s',now.isoformat())
     assert '2025-01-01' in data
     assert '2023-01-01' not in data
+
+
+def test_evening_retries_until_midnight_and_stops_after_success():
+    tz=ZoneInfo('Asia/Jerusalem');data={}
+    assert not ledger.evening_pending(data,datetime(2026,10,30,19,59,tzinfo=tz),tz)
+    for hour in (20,21,22,23):
+        now=datetime(2026,10,30,hour,59,tzinfo=tz)
+        assert ledger.evening_pending(data,now,tz)
+        failed=fixture(now,tz);failed['weather_status']='stale'
+        ledger.capture(data,failed,now,tz,'v','s',now.isoformat())
+        assert ledger.evening_pending(data,now,tz)
+    ledger.capture(data,fixture(now,tz),now,tz,'v','s',now.isoformat())
+    assert not ledger.evening_pending(data,now,tz)
+    assert not ledger.evening_pending({},datetime(2026,10,31,0,0,tzinfo=tz),tz)
+
+
+def test_provider_retry_after_is_respected():
+    now=datetime(2026,10,30,20,tzinfo=timezone.utc)
+    assert ledger.retry_delay(None,now)==300
+    assert ledger.retry_delay({'requests':[{'retry_after':'1200'}]},now)==1200
+    assert ledger.retry_delay({'requests':[{'retry_after':'Fri, 30 Oct 2026 21:00:00 GMT'}]},now)==3600

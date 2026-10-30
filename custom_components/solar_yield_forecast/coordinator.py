@@ -23,7 +23,7 @@ from .model import (combine_weather, calibration, daily_shape_normalizers, day_o
                     forecast_summary, open_meteo_azimuth, merge_quarter_hourly,
                     recent_live_scale, quarter_weather_rows)
 from .history import daily_energy_maxima
-from .forecast_ledger import capture, score
+from .forecast_ledger import capture, score, evening_pending, retry_delay
 from .freshness import usable_forecast
 from .robust import learn_profile
 from .power_archive import PowerArchive
@@ -473,7 +473,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
         local = now.astimezone(self.tz)
         today = local.date().isoformat()
         previous_count = sum(len(v) for v in self.forecast_ledger.values())
-        capture(self.forecast_ledger, result, now, self.tz, '1.7.0',
+        capture(self.forecast_ledger, result, now, self.tz, '1.7.1',
                 self._archive_signature(), self.weather_updated_at)
         result['forecast_ledger_history'], result['forecast_ledger_summary'] = score(
             self.forecast_ledger, self.actuals, today)
@@ -525,6 +525,7 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
             self.shape_factors, tz=self.tz, today_scale=live_scale,
         )
         result.update({
+            'integration_version': '1.7.1',
             'weather_updated_at':self.weather_updated_at,
             'weather_status':'stale' if self.weather_error else 'fresh',
             'last_refresh_error':self.weather_error,
@@ -561,7 +562,14 @@ class SolarYieldCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         async with self._model_update_lock:
-            return await self._async_fetch_model()
+            try:
+                return await self._async_fetch_model()
+            finally:
+                # Failed/partial weather must not turn the evening snapshot
+                # into a one-shot attempt. Ordinary polling continues outside
+                # this window; no missed snapshot is backfilled after midnight.
+                pending = evening_pending(self.forecast_ledger, datetime.now(timezone.utc), self.tz)
+                self.update_interval = timedelta(seconds=retry_delay(self.weather_error, datetime.now(timezone.utc)) if pending else 900)
 
     async def _async_fetch_model(self):
         previous_weather_time=self.weather_updated_at
