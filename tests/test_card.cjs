@@ -11,7 +11,7 @@ test('historical originals preserve priority, zero, gaps and explicit cohorts',(
  assert.equal(ctx.solarHistoricalDays(attrs)['2020-01-01'].kwh,10);
  assert.equal(ctx.solarHistoricalDays(attrs)['2020-01-02'].kwh,0);
  assert.equal(ctx.solarHistoricalDays(attrs)['2020-01-03'],undefined);
- assert.equal(ctx.solarHistoricalDays(attrs,'legacy')['2020-01-01'].kwh,90);
+ assert.equal(ctx.solarHistoricalDays(attrs,'legacy')['2020-01-01'],undefined);
  assert.equal(ctx.solarHistoricalDays(attrs,'morning')['2020-01-02'],undefined);
 });
 test('period graphs compare only matched complete days and keep late/legacy labels',()=>{
@@ -20,10 +20,10 @@ test('period graphs compare only matched complete days and keep late/legacy labe
  const c={_hass:{states:{test:{attributes:attrs}}},config:{day_forecast_entity:'test'},_selected:'2020-01-15',_period:'month',_visible:[true,true,true],_timeZone:()=>'UTC',getBoundingClientRect:()=>({width:850})};
  return SolarComparisonCard.prototype._energySvg.call(c);
  })()`,ctx);
- assert.equal((result.match(/data-historical="true"/g)||[]).length,3);
- assert.match(result,/завершённым дням: 2/);
- assert.match(result,/Прогноз: 16.0 кВт·ч · Факт: 25.0/);
- assert.match(result,/Прежних снимков: 1/);
+ assert.equal((result.match(/data-historical="true"/g)||[]).length,2);
+ assert.match(result,/завершённым дням: 1/);
+ assert.match(result,/Прогноз: 10.0 кВт·ч · Факт: 20.0/);
+ assert.doesNotMatch(result,/Прежних снимков/);
  assert.match(result,/нет данных/);
 });
 test('custom reversed interval is rejected rather than summed',()=>{
